@@ -2,47 +2,18 @@
 // line, and vines with leaves winding over two of its corners. The stone knight stands on the
 // rating panel inside a gold ring, with a few leaves drifting down.
 
+import { rng, closed, octagon, vine, place } from "../lib/organic.js";
+
 const KNIGHT = new URL("./knight.webp", import.meta.url).href;
 const GOLD = "#e7c26a";
 
-// Small deterministic random numbers, so a panel's vines don't jump around on every update.
-function rng(seed) {
-  let s = seed % 2147483647 || 1;
-  return () => (s = (s * 16807) % 2147483647) / 2147483647;
-}
-
-const pts = (list) => list.map((p) => p.map((v) => v.toFixed(1)).join(",")).join(" L");
-const closed = (list) => `M${pts(list)} Z`;
-
-// A smooth curve through points (Catmull-Rom as cubic Béziers).
-function smooth(p) {
-  let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
-  for (let i = 0; i < p.length - 1; i++) {
-    const a = p[i - 1] || p[i], b = p[i], c = p[i + 1], e = p[i + 2] || c;
-    d += ` C${(b[0] + (c[0] - a[0]) / 6).toFixed(1)},${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)},${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
-  }
-  return d;
-}
-
-// A vine along a polyline (from the corner outwards), wobbling across the frame, with leaves.
-function vine(route, rand, length) {
-  // Walk the route, sampling points every 14px with a sideways wobble.
-  const samples = [];
-  let walked = 0;
-  for (let i = 0; i < route.length - 1 && walked < length; i++) {
-    const [x1, y1] = route[i], [x2, y2] = route[i + 1];
-    const seg = Math.hypot(x2 - x1, y2 - y1), nx = -(y2 - y1) / seg, ny = (x2 - x1) / seg;
-    for (let t = 0; t < seg && walked < length; t += 14, walked += 14) {
-      const w = Math.sin(walked / 22) * 5 + (rand() - 0.5) * 2;
-      samples.push([x1 + ((x2 - x1) * t) / seg + nx * w, y1 + ((y2 - y1) * t) / seg + ny * w, Math.atan2(y2 - y1, x2 - x1)]);
-    }
-  }
-  if (samples.length < 3) return "";
-  const d = smooth(samples.map(([x, y]) => [x, y]));
+// A vine (themes/lib/organic.js) dressed with leaves on alternating sides.
+function leafyVine(route, rand, length) {
+  const { d, samples } = vine(route, rand, length);
+  if (!d) return "";
   const leaves = samples.filter((_, i) => i % 2 === 1 && i < samples.length - 1).map(([x, y, a], i) => {
-    const side = i % 2 ? 1 : -1, size = 0.65 + rand() * 0.55;
-    const angle = (a * 180) / Math.PI + side * (40 + rand() * 30);
-    return `<use href="#grove-leaf" transform="translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${angle.toFixed(0)}) scale(${size.toFixed(2)})"/>`;
+    const side = i % 2 ? 1 : -1;
+    return place("grove-leaf", x, y, (a * 180) / Math.PI + side * (40 + rand() * 30), 0.65 + rand() * 0.55);
   }).join("");
   return `<path d="${d}" stroke="#3a2412" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.9"/>
     <path d="${d}" stroke="url(#grove-wood)" stroke-width="3.2" fill="none" stroke-linecap="round"/>${leaves}`;
@@ -50,12 +21,10 @@ function vine(route, rand, length) {
 
 function frame(w, h, c, seed) {
   const rand = rng(seed);
-  const outer = [[c, 0], [w - c, 0], [w, c], [w, h - c], [w - c, h], [c, h], [0, h - c], [0, c]];
-  const k = 9, kc = c - 3;
-  const inner = [[k + kc, k], [w - k - kc, k], [w - k, k + kc], [w - k, h - k - kc], [w - k - kc, h - k], [k + kc, h - k], [k, h - k - kc], [k, k + kc]];
+  const outer = octagon(w, h, c), inner = octagon(w, h, c, 9);
   // Vines over the top-left and bottom-right corners, like the mockup.
-  const tl = vine([[c * 0.4, h * 0.55], [0, c + 4], [c, 0], [w * 0.4, -1]], rand, Math.min(w * 0.45 + h * 0.5, 420));
-  const br = vine([[w - c * 0.4, h * 0.3], [w, h - c - 4], [w - c, h], [w * 0.62, h + 1]], rand, Math.min(w * 0.35 + h * 0.5, 360));
+  const tl = leafyVine([[c * 0.4, h * 0.55], [0, c + 4], [c, 0], [w * 0.4, -1]], rand, Math.min(w * 0.45 + h * 0.5, 420));
+  const br = leafyVine([[w - c * 0.4, h * 0.3], [w, h - c - 4], [w - c, h], [w * 0.62, h + 1]], rand, Math.min(w * 0.35 + h * 0.5, 360));
   return `<svg class="grove-frame" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
     <defs>
       <filter id="grove-stone" x="-5%" y="-5%" width="110%" height="110%">

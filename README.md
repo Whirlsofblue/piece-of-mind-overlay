@@ -48,7 +48,7 @@ Add these to the URL with `&`:
 | `reset` | Start a new session now. Otherwise a session ends after 6 hours without games. |
 | `since=2` | Count the last 2 hours as this session, if you added the overlay late. |
 | `layout=vertical` | Big, phone-readable panels: `ticker` (rating, score, streak) and `card`, which rotates between your rating, the last game and the session, and shows each finished game for 12 seconds. |
-| `theme=holo` | The look: `classic` (default); `holo`, translucent HUD panels with glowing chamfered frames and a hologram knight; or `grove`, stone frames wound with vines and leaves on forest-green panels, with sun rays and a stone knight. Every theme works with both layouts. |
+| `theme=holo` | The look: `classic` (default); `holo`, translucent HUD panels with glowing chamfered frames and a hologram knight; `grove`, stone frames wound with vines and leaves on forest-green panels, with sun rays and a stone knight; or `blossom`, pale pearl panels with rose-gold frames, blossoming vines, sparkles, drifting petals and a marble knight (a light theme: dark text). Every theme works with both layouts. |
 | `font=classic` | Display font. The default is `bricolage`; others are `classic` (the original serif), `fraunces`, `outfit`, `nunito` and `grotesk`. |
 | `demo` | Made-up numbers, for arranging your scene before you play. Add `moment` to see the post-game card. |
 
@@ -58,6 +58,7 @@ Each look is a folder in `themes/`: `theme.css` restyles the panels (colours, fo
 colours are CSS variables such as `--chart-1` and `--eval-good`), and an optional `theme.js` exports
 `decorate(root, { vertical })`, which runs after every update to draw extras (holo draws its
 frames and places the knight). The panels and data are shared, so a new theme works in every layout.
+`themes/lib/organic.js` holds the vine-drawing helpers the nature themes share.
 
 ## Session → Lichess study
 

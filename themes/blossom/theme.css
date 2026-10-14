@@ -1,0 +1,128 @@
+/* Blossom: pale pearl panels with rose-gold frames, blossoming vines, drifting petals and the
+   marble knight with flowers. Frames, vines, flowers, sparkles and the knight's ring are drawn
+   by theme.js. A light theme: dark plum text on translucent pearl. */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Lato:wght@400;700&display=swap");
+
+body.theme-blossom {
+  --panel: transparent;
+  --line: rgba(196, 140, 120, 0.3);
+  --ink: #3e2532;
+  --muted: rgba(92, 60, 76, 0.78);
+  --gold: #b88934;
+  --rose: #d97a95;
+  --win: #4f9a5e;
+  --draw: #b88934;
+  --loss: #cc5a63;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --sans: "Lato", system-ui, sans-serif;
+  --chart-1: #e7a3b8; --chart-2: #d98fa6; --chart-3: #d6aa52; --chart-now: #c08a2e; --chart-low: #cc5a63;
+  --chart-fill-up: #f0b8c8; --chart-fill-down: #f0b8c8; --chart-fill-opacity: 0.45;
+  --eval-good: rgba(79, 154, 94, 0.25); --eval-bad: rgba(204, 90, 99, 0.25); --eval-line: #5a3346;
+  font-variant-numeric: lining-nums;
+}
+
+/* Panels: pearl fill on ::before (clipped to the chamfered shape), frame SVG from theme.js on top. */
+.theme-blossom .panel {
+  --cut: 16px;
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  color: var(--ink);
+}
+.theme-blossom .panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background:
+    radial-gradient(120% 90% at 85% 0%, rgba(255, 236, 200, 0.55), transparent 60%),
+    linear-gradient(115deg, transparent 0 30%, rgba(255, 255, 255, 0.25) 36%, transparent 44%) 0 0 / 220% 100%,
+    linear-gradient(165deg, rgba(255, 249, 251, 0.92), rgba(251, 234, 240, 0.87));
+  animation: blossomLight 26s ease-in-out infinite alternate;
+}
+@keyframes blossomLight { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 100% 0, 0 0; } }
+.blossom-frame { position: absolute; inset: 0; z-index: -1; overflow: visible; pointer-events: none; }
+.blossom-frame .twinkle { animation: blossomTwinkle 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.blossom-frame .twinkle.late { animation-delay: -1.7s; }
+@keyframes blossomTwinkle { 0%, 100% { opacity: 0.2; transform: scale(0.6); } 50% { opacity: 1; transform: scale(1); } }
+
+/* Type: elegant serif labels and numbers, a clean sans for small print. */
+.theme-blossom .label {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.16em;
+  color: #8a5a3a;
+}
+.theme-blossom .label small::before, .theme-blossom .label small::after { content: none; }
+.theme-blossom .label small { font-family: var(--sans); font-size: 11px; letter-spacing: 0.14em; color: var(--muted); border-left: 1px solid rgba(184, 137, 52, 0.5); padding-left: 10px; margin-left: 10px; text-transform: uppercase; }
+.theme-blossom .num { font-weight: 700; color: #3e2532; }
+.theme-blossom .rating-now { font-size: 68px; }
+.theme-blossom .delta.up { color: var(--win); } .theme-blossom .delta.down { color: var(--loss); }
+.theme-blossom .stat .sub, .theme-blossom .q .sub, .theme-blossom .ends span, .theme-blossom .accs span, .theme-blossom .card .sub, .theme-blossom .hint, .theme-blossom .review-head i, .theme-blossom .vs span {
+  color: var(--muted); letter-spacing: 0.06em;
+}
+.theme-blossom .player { --cut: 12px; }
+.theme-blossom .player .name { font-size: 28px; font-weight: 700; color: #3e2532; }
+.theme-blossom .player .rating { color: var(--muted); }
+.theme-blossom .opening .name { font-weight: 700; font-size: 22px; }
+.theme-blossom .opening .pct, .theme-blossom .openings-head i { color: var(--muted); }
+
+/* The marble knight replaces the pawn icon in the player tag and the ticker. */
+.theme-blossom .pawn {
+  display: inline-block;
+  width: 28px;
+  height: 40px;
+  font-size: 0;
+  vertical-align: middle;
+  background: url("knight.webp") center / contain no-repeat;
+  filter: drop-shadow(0 2px 3px rgba(120, 70, 90, 0.35));
+}
+
+/* Dividers: fine gold lines with a diamond at each end. */
+.theme-blossom .stat, .theme-blossom .q { position: relative; border-left: 1px solid rgba(184, 137, 52, 0.55); }
+.theme-blossom .stat:first-child, .theme-blossom .q:first-child { border-left: 0; }
+.theme-blossom .stat:not(:first-child)::before, .theme-blossom .stat:not(:first-child)::after,
+.theme-blossom .q:not(:first-child)::before, .theme-blossom .q:not(:first-child)::after {
+  content: ""; position: absolute; left: -4px; width: 7px; height: 7px; background: var(--gold); transform: rotate(45deg);
+}
+.theme-blossom .stat::before, .theme-blossom .q::before { top: -6px; }
+.theme-blossom .stat::after, .theme-blossom .q::after { bottom: -6px; }
+.theme-blossom .openings-head { border-bottom-color: rgba(184, 137, 52, 0.35); }
+.theme-blossom .opening { border-bottom-color: rgba(184, 137, 52, 0.15); }
+.theme-blossom .bar { background: rgba(184, 137, 52, 0.15); border-radius: 5px; }
+.theme-blossom .result.W { background: rgba(79, 154, 94, 0.15); } .theme-blossom .result.L { background: rgba(204, 90, 99, 0.15); }
+
+/* Charts. */
+.theme-blossom .chart, .theme-blossom .evalchart { filter: drop-shadow(0 0 5px rgba(231, 163, 184, 0.6)); }
+.theme-blossom .rating-card { overflow: visible; }
+.theme-blossom .card.moment::before { background: linear-gradient(165deg, rgba(255, 240, 214, 0.9), rgba(250, 226, 234, 0.82)); }
+
+/* The marble knight standing on the rating panel, in a gold ring, with sparkles and petals. */
+body.theme-blossom:not(.vertical) #root { padding-top: 150px; }
+.blossom-emblem { position: absolute; width: 230px; height: 260px; pointer-events: none; z-index: 5; }
+.blossom-emblem svg { position: absolute; inset: 0; overflow: visible; }
+.blossom-emblem .twinkle { animation: blossomTwinkle 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.blossom-emblem .twinkle.late { animation-delay: -1.5s; }
+.blossom-emblem img { position: absolute; right: 22px; bottom: 0; height: 210px; filter: drop-shadow(0 6px 8px rgba(120, 70, 90, 0.35)); }
+.blossom-emblem .petal { position: absolute; top: 10px; opacity: 0; animation: blossomFall 17s linear infinite; }
+.blossom-emblem .petal:nth-of-type(2) { left: 30px; animation-delay: -4s; animation-duration: 21s; }
+.blossom-emblem .petal:nth-of-type(3) { left: 120px; animation-delay: -9s; animation-duration: 19s; }
+.blossom-emblem .petal:nth-of-type(4) { left: 190px; animation-delay: -13s; animation-duration: 24s; }
+.blossom-emblem .petal:nth-of-type(5) { left: 80px; animation-delay: -16s; animation-duration: 18s; }
+@keyframes blossomFall {
+  0% { transform: translate(0, 0) rotate(0); opacity: 0; }
+  10% { opacity: 0.9; }
+  45% { transform: translate(-40px, 130px) rotate(140deg); }
+  85% { opacity: 0.75; }
+  100% { transform: translate(15px, 320px) rotate(300deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-blossom .panel::before, .blossom-frame .twinkle, .blossom-emblem .twinkle { animation: none; }
+  .blossom-emblem .petal { display: none; }
+}
