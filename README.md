@@ -60,6 +60,8 @@ Lichess study of the session: every game analysed with Stockfish and annotated w
 (Lichess's thresholds), the engine's better line as a variation, chess.com's clock times, and
 a note where each game left the moves 2000+ players usually choose (from the Lichess opening
 explorer). When it was you who left that path, a one-move quiz chapter is added at the end.
+Quizzes also go into one private, growing study, "My openings · Piece of Mind" (then "… 2"
+when it reaches Lichess's 64-chapter limit). Positions already there aren't added again.
 The Lichess login stays in your browser and can be revoked at lichess.org/account/oauth/token.
 
 ## Notes

@@ -78,6 +78,7 @@
         <select id="visibility"><option value="unlisted" selected>Unlisted (anyone with the link)</option><option value="private">Private</option><option value="public">Public</option></select></label>
     </div>
     <label class="check"><input type="checkbox" id="openings" checked><span>Opening notes and quizzes<small>Where each game left the moves strong players usually choose, plus a one-move quiz chapter whenever it was you.</small></span></label>
+    <label class="check"><input type="checkbox" id="repertoire" checked><span>Add quizzes to “My openings”<small>One private study that grows every session: a repertoire built from your own games. Positions already in it aren't added twice.</small></span></label>
     <button class="secondary" id="find">Find games</button>
     <ul class="games" id="games"></ul>
   </section>
@@ -112,7 +113,7 @@ async function login() {
   const verifier = randomString(), state = randomString();
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   sessionStorage.setItem("pom-pkce", JSON.stringify({ verifier, state }));
-  const q = new URLSearchParams({ response_type: "code", client_id: CLIENT_ID, redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge, scope: "study:write", state });
+  const q = new URLSearchParams({ response_type: "code", client_id: CLIENT_ID, redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge, scope: "study:read study:write", state });
   location.href = `${LICHESS}/oauth?${q}`;
 }
 
@@ -202,6 +203,60 @@ async function lichess(path, body, method = "POST") {
   return r.headers.get("content-type")?.includes("json") ? r.json() : r.text();
 }
 
+// Every new study starts with an empty chapter; drop it once real chapters are in.
+async function removeEmptyFirstChapter(studyId) {
+  try {
+    const pgn = await lichess(`/api/study/${studyId}.pgn`, null, "GET");
+    const first = (pgn.match(/\[ChapterURL "[^"]*\/([A-Za-z0-9]{8})"\]/) || [])[1];
+    if (first) await lichess(`/api/study/${studyId}/${first}`, null, "DELETE");
+  } catch {}
+}
+
+// ---- "My openings": one growing study of quiz chapters across sessions ----
+const REPERTOIRE = "My openings · Piece of Mind";
+const fenKey = (fen) => fen.split(" ").slice(0, 4).join(" "); // position + side, castling, en passant
+
+async function myStudies() {
+  const r = await fetch(`${LICHESS}/api/study/by/${lichessUser}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/x-ndjson" } });
+  if (!r.ok) throw new Error(`couldn't list your studies (${r.status})`);
+  return (await r.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
+}
+
+// Adds quiz chapters to the newest "My openings" study with room, skipping positions it
+// already has; starts "My openings · Piece of Mind 2" (3, ...) when one fills up (64 chapters).
+async function addToRepertoire(quizzes) {
+  const mine = (await myStudies()).filter((st) => st.name.startsWith(REPERTOIRE))
+    .sort((a, b) => (parseInt(a.name.slice(REPERTOIRE.length)) || 1) - (parseInt(b.name.slice(REPERTOIRE.length)) || 1));
+  const seen = new Set();
+  let target = null, count = 0;
+  for (const st of mine) {
+    const pgn = await lichess(`/api/study/${st.id}.pgn`, null, "GET");
+    for (const m of pgn.matchAll(/\[FEN "([^"]+)"\]/g)) seen.add(fenKey(m[1]));
+    target = st;
+    count = (pgn.match(/\[ChapterName /g) || []).length;
+  }
+  const fresh = quizzes.filter((q) => !seen.has(fenKey(q.pgn.match(/\[FEN "([^"]+)"\]/)[1])));
+  let added = 0;
+  const created = [];
+  for (const q of fresh) {
+    if (!target || count >= 64) {
+      const name = mine.length === 0 ? REPERTOIRE : `${REPERTOIRE} ${mine.length + 1}`;
+      target = await lichess("/api/study", {
+        name, visibility: "private", computer: "everyone", explorer: "everyone", cloneable: "owner", shareable: "owner", chat: "nobody", sticky: "false",
+      });
+      target.name = name;
+      mine.push(target);
+      created.push(target.id);
+      count = 1; // the empty chapter Lichess starts every study with
+    }
+    await lichess(`/api/study/${target.id}/import-pgn`, { pgn: q.pgn, name: q.name, orientation: q.orientation, mode: "gamebook" });
+    count++;
+    added++;
+  }
+  for (const id of created) await removeEmptyFirstChapter(id);
+  return { added, skipped: quizzes.length - fresh.length, study: target };
+}
+
 $("create").onclick = async () => {
   $("create").disabled = true;
   $("log").replaceChildren();
@@ -248,16 +303,20 @@ $("create").onclick = async () => {
       log(`Adding chapter ${i + 1} of ${all.length}: ${c.name}`);
       await lichess(`/api/study/${study.id}/import-pgn`, { pgn: c.pgn, name: c.name, ...(c.orientation && { orientation: c.orientation }), ...(c.mode && { mode: c.mode }) });
     }
-    // Remove the empty first chapter Lichess creates with every new study.
-    try {
-      const pgn = await lichess(`/api/study/${study.id}.pgn`, null, "GET");
-      const first = (pgn.match(/\[ChapterURL "[^"]*\/([A-Za-z0-9]{8})"\]/) || [])[1];
-      if (first) await lichess(`/api/study/${study.id}/${first}`, null, "DELETE");
-    } catch {}
+    await removeEmptyFirstChapter(study.id);
+    let repertoireNote = "";
+    if ($("repertoire").checked && quizzes.length) {
+      try {
+        log("Adding quizzes to “My openings”…");
+        const rep = await addToRepertoire(quizzes);
+        if (rep.study) repertoireNote = ` ${rep.added} new position${rep.added === 1 ? "" : "s"} added to <a href="${LICHESS}/study/${rep.study.id}" target="_blank" rel="noopener">My openings</a>${rep.skipped ? ` (${rep.skipped} already there)` : ""}.`;
+        else repertoireNote = ` All ${rep.skipped} quiz position${rep.skipped === 1 ? " was" : "s were"} already in My openings.`;
+      } catch (e) { log(`My openings wasn't updated: ${e.message}. Log out and in again if this keeps happening.`, true); }
+    }
     const url = `${LICHESS}/study/${study.id}`;
     const done = document.createElement("div");
     done.className = "done";
-    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${chapters.length} games, ${quizzes.length} quiz${quizzes.length === 1 ? "" : "zes"}).`;
+    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${chapters.length} games, ${quizzes.length} quiz${quizzes.length === 1 ? "" : "zes"}).${repertoireNote}`;
     $("log").append(done);
   } catch (e) {
     console.error(e);
