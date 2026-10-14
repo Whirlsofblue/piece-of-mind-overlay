@@ -1,0 +1,733 @@
+<!doctype html>
+<!--
+  Piece of Mind stream overlay: a transparent page for an OBS Browser Source.
+
+  Session stats come from chess.com's public game data (polled every 20 s). Each finished
+  game is then analysed here with Stockfish, using Lichess's published accuracy and
+  inaccuracy / mistake / blunder formulas. chess.com's own move counts (Brilliant, Great...)
+  come from the Piece of Mind extension, which reads chess.com's post-game box and relays it
+  through OBS's WebSocket server (OBS 28+: Tools > WebSocket Server Settings).
+
+  Must be served over http(s): browsers don't run the engine or modules from file:// pages.
+
+  URL options:
+    user=NAME        chess.com username (required)
+    password=...     OBS WebSocket password, for move-quality counts (leave out if auth is off)
+    port=4455        OBS WebSocket port
+    show=player,rating,stats,review,lastgame,openings,quality   panels to show, in order (one per source works too)
+    layout=vertical  big, phone-readable panels for vertical streams: show=ticker (one line of
+                     rating, score and streak) and show=card (rotates rating / last game / session,
+                     and celebrates each finished game for a few seconds). Use one source for each.
+    quality=brilliant,great,best   chess.com move-quality tallies to show
+    depth=18         engine depth per position (about 10 s a game; lower is quicker, higher more exact)
+    engine=off       skip the engine review
+    tc=auto          time class: auto (follows your latest game), bullet, blitz, rapid or daily
+    reset            start a new session now (otherwise a new one starts after 6 hours without games)
+    since=3          count the last 3 hours as this session (e.g. after starting the overlay late)
+    demo             made-up numbers, for placing the overlay before you play
+    bg               dark background, for previewing in a normal browser
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piece of Mind Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --panel: rgba(16, 20, 19, 0.78);
+    --line: rgba(255, 255, 255, 0.14);
+    --ink: #f3efe6;
+    --muted: rgba(243, 239, 230, 0.62);
+    --gold: #e8c46a;
+    --win: #7fb069;
+    --draw: #d8c39a;
+    --loss: #c8644f;
+    --serif: "Cormorant Garamond", Georgia, serif;
+    --sans: Inter, system-ui, sans-serif;
+  }
+  html, body { margin: 0; background: transparent; color: var(--ink); font-family: var(--sans); font-variant-numeric: lining-nums; }
+  body.bg { background: #2a2622 radial-gradient(circle at 70% 30%, #4a4036, #1d1a17 70%); min-height: 100vh; }
+  #root { width: 640px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    padding: 16px 20px;
+  }
+  .label { font-family: var(--serif); font-size: 17px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .label small { font-size: 13px; letter-spacing: 0.08em; opacity: 0.8; margin-left: 6px; }
+  .num { font-family: var(--serif); font-weight: 600; }
+
+  /* Player tag */
+  .player { display: inline-flex; align-self: flex-start; align-items: center; gap: 14px; padding: 10px 20px 10px 14px; border-radius: 14px; }
+  .player .pawn { font-size: 30px; color: var(--gold); line-height: 1; }
+  .player .name { font-family: var(--serif); font-size: 28px; font-weight: 600; }
+  .player .rating { font-family: var(--serif); font-size: 22px; color: var(--muted); }
+  .player .title { background: #8b2b2b; color: #fff; font: 600 12px var(--sans); padding: 2px 6px; border-radius: 4px; }
+  .player .flag { font-size: 22px; }
+
+  /* Rating */
+  .rating-card { position: relative; overflow: hidden; }
+  .rating-head { display: flex; align-items: baseline; gap: 16px; }
+  .rating-now { font-size: 64px; line-height: 1; }
+  .delta { font-family: var(--serif); font-size: 30px; font-weight: 600; }
+  .delta.up { color: var(--win); } .delta.down { color: var(--loss); } .delta.flat { color: var(--muted); }
+  .chart { display: block; width: 100%; height: 120px; margin-top: 4px; }
+  .ends { display: flex; justify-content: space-between; margin-top: 2px; }
+  .ends div { display: flex; flex-direction: column; font-family: var(--serif); }
+  .ends span { font-size: 15px; color: var(--muted); }
+  .ends b { font-size: 24px; font-weight: 600; }
+  .ends .low { text-align: center; } .ends .now { text-align: right; }
+
+  /* Stats row */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); padding: 14px 8px; }
+  .stat { display: flex; align-items: center; gap: 10px; padding: 0 12px; border-left: 1px solid var(--line); }
+  .stat:first-child { border-left: 0; }
+  .stat .icon { font-size: 26px; }
+  .stat .num { font-size: 28px; line-height: 1.05; white-space: nowrap; }
+  .stat .sub { font-size: 12px; color: var(--muted); }
+  .streak-W { color: var(--win); } .streak-L { color: var(--loss); } .streak-D { color: var(--draw); }
+
+  /* Openings */
+  .openings-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .openings-head i { font-family: var(--serif); font-size: 17px; color: var(--muted); }
+  .opening { display: grid; grid-template-columns: 18px 1fr 30px 190px 48px; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .opening:last-child { border-bottom: 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .opening .name { font-family: var(--serif); font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opening .count { font-family: var(--serif); font-size: 19px; text-align: right; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255, 255, 255, 0.1); }
+  .bar span { height: 100%; }
+  .opening .pct { font-family: var(--serif); font-size: 19px; text-align: right; color: var(--muted); }
+
+  /* Move quality */
+  .quality { display: flex; margin-top: 12px; }
+  .q { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; border-left: 1px solid var(--line); }
+  .q:first-child { border-left: 0; }
+  .q .top { display: flex; align-items: center; gap: 10px; }
+  .badge { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 700 15px var(--sans); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2); }
+  .q .num { font-size: 34px; line-height: 1; }
+  .q .sub { font-size: 13px; color: var(--muted); }
+  .q.bump .num { animation: bump 0.9s ease-out; }
+  @keyframes bump { 0% { transform: scale(1.5); color: var(--gold); } 100% { transform: scale(1); } }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; text-align: center; }
+
+  /* Engine review */
+  .review-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .review-head i { font-size: 12px; color: var(--muted); font-style: normal; }
+  .acc .num { font-size: 40px; line-height: 1; }
+  .acc .num small { font-size: 22px; }
+  .acc-high { color: var(--win); } .acc-mid { color: var(--gold); } .acc-low { color: var(--loss); }
+
+  /* Last game */
+  .lastgame .vs { display: flex; justify-content: space-between; align-items: baseline; margin-top: 2px; }
+  .lastgame .vs b { font-family: var(--serif); font-size: 22px; font-weight: 600; }
+  .lastgame .vs span { font-size: 13px; color: var(--muted); }
+  .result { font: 600 12px var(--sans); padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+  .result.W { background: rgba(127, 176, 105, 0.25); color: var(--win); }
+  .result.L { background: rgba(200, 100, 79, 0.25); color: var(--loss); }
+  .result.D { background: rgba(216, 195, 154, 0.2); color: var(--draw); }
+  .evalchart { display: block; width: 100%; height: 110px; margin: 8px 0 4px; }
+  .accs { display: flex; justify-content: space-between; font-family: var(--serif); font-size: 18px; }
+  .accs span { color: var(--muted); font-size: 15px; }
+
+  /* Vertical layout: sized for a 1080-wide canvas viewed on a phone */
+  body.vertical #root { width: auto; padding: 8px; }
+  .ticker { display: inline-flex; align-items: center; gap: 18px; padding: 8px 22px; border-radius: 14px; font-family: var(--serif); font-size: 34px; font-weight: 600; white-space: nowrap; }
+  .ticker .delta { font-size: 30px; }
+  .ticker .sep { color: var(--muted); font-weight: 500; }
+  .card { width: 420px; height: 236px; box-sizing: border-box; padding: 14px 20px; display: flex; flex-direction: column; }
+  .card.fade { animation: cardIn 0.6s ease-out; }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .card .label { font-size: 20px; }
+  .card .big { font-family: var(--serif); font-weight: 600; font-size: 64px; line-height: 1; }
+  .card .row { display: flex; align-items: baseline; gap: 14px; }
+  .card .chart, .card .evalchart { flex: 1; min-height: 0; height: auto; margin-top: 6px; }
+  .card .foot { display: flex; justify-content: space-between; font-family: var(--serif); font-size: 24px; }
+  .card .foot span { color: var(--muted); font-size: 20px; }
+  .card .counts { display: flex; justify-content: space-between; margin-top: auto; }
+  .card .counts div { display: flex; align-items: center; gap: 8px; font-family: var(--serif); font-size: 36px; font-weight: 600; }
+  .card .counts .badge { width: 34px; height: 34px; font-size: 16px; }
+  .card .vsline { font-family: var(--serif); font-size: 26px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .vsline span { color: var(--muted); font-size: 20px; font-weight: 500; }
+  .card.moment { border-color: rgba(232, 196, 106, 0.8); box-shadow: 0 0 0 2px rgba(232, 196, 106, 0.35), 0 8px 28px rgba(0, 0, 0, 0.45); }
+  .card.moment .big.W { color: var(--win); } .card.moment .big.L { color: var(--loss); } .card.moment .big.D { color: var(--draw); }
+  .card .note { font-size: 20px; color: var(--muted); margin-top: auto; }
+  .card .sub { font-size: 22px; color: var(--muted); }
+
+  .message { font-family: var(--serif); font-size: 20px; color: var(--muted); }
+  .toast { position: fixed; top: 16px; right: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 13px; opacity: 0; transition: opacity 0.4s; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="toast" id="toast"></div>
+<script type="module">
+import { Engine, analyseGame } from "./review.js";
+
+const params = new URLSearchParams(location.search);
+const USER = (params.get("user") || "").trim().toLowerCase();
+const PORT = params.get("port") || "4455";
+const PASSWORD = params.get("password") || "";
+const VERTICAL = params.get("layout") === "vertical";
+const SHOW = (params.get("show") || (VERTICAL ? "ticker,card" : "player,rating,stats,review,lastgame,openings,quality")).split(",");
+const QUALITY_SHOWN = (params.get("quality") || "brilliant,great,best").split(",");
+const ENGINE_ON = params.get("engine") !== "off" && SHOW.some((k) => ["review", "lastgame", "card"].includes(k));
+const DEPTH = Number(params.get("depth")) || 18;
+const TC = params.get("tc") || "auto";
+const DEMO = params.has("demo");
+const SESSION_GAP = 6 * 3600; // seconds without a game before a new session starts
+if (params.has("bg")) document.body.classList.add("bg");
+if (VERTICAL) document.body.classList.add("vertical");
+const BOOT = Math.floor(Date.now() / 1000);
+
+const QUALITY = {
+  brilliant: { label: "Brilliancies", one: "Brilliancy", colour: "#1baaa6", glyph: "!!" },
+  great: { label: "Great Moves", one: "Great Move", colour: "#5c8bb0", glyph: "!" },
+  best: { label: "Best Moves", one: "Best Move", colour: "#81b64c", glyph: "★" },
+  excellent: { label: "Excellent", one: "Excellent", colour: "#96bc4b", glyph: "👍" },
+  good: { label: "Good Moves", one: "Good Move", colour: "#95b776", glyph: "✓" },
+  book: { label: "Book Moves", one: "Book Move", colour: "#a88865", glyph: "📖" },
+  inaccuracy: { label: "Inaccuracies", one: "Inaccuracy", colour: "#f0c15c", glyph: "?!" },
+  mistake: { label: "Mistakes", one: "Mistake", colour: "#e69d43", glyph: "?" },
+  miss: { label: "Misses", one: "Miss", colour: "#e5735d", glyph: "✗" },
+  blunder: { label: "Blunders", one: "Blunder", colour: "#d8402c", glyph: "??" },
+};
+const OPENING_COLOURS = ["#7fb069", "#c8644f", "#e0b45c", "#5b8fd6", "#a77fd0", "#4fb3a9"];
+const DRAWS = new Set(["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"]);
+
+// ---- Session: kept in localStorage so a refreshed source carries on ----
+const STORE = `pom-overlay-${USER}`;
+const now = () => Math.floor(Date.now() / 1000);
+let session = null;
+try { session = JSON.parse(localStorage.getItem(STORE)); } catch {}
+if (!session || params.has("reset") || now() - session.last > SESSION_GAP) {
+  session = { start: now(), last: now(), quality: [] };
+}
+session.reviews ||= {}; // game uuid -> engine review
+if (params.get("since")) session.start = now() - Math.round(parseFloat(params.get("since")) * 3600);
+const saveSession = () => { try { localStorage.setItem(STORE, JSON.stringify(session)); } catch {} };
+saveSession();
+
+// ---- chess.com public data ----
+const API = "https://api.chess.com/pub/player/";
+const monthUrl = (d) => `${API}${USER}/games/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+const monthCache = {}; // finished months never change
+
+async function getJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`${r.status} ${url}`);
+  return r.json();
+}
+
+async function monthGames(date, final) {
+  const url = monthUrl(date);
+  if (final && monthCache[url]) return monthCache[url];
+  const data = await getJson(url);
+  const games = (data?.games || []).filter((g) => g.rules === "chess");
+  if (final) monthCache[url] = games;
+  return games;
+}
+
+const side = (g) => (g.white.username.toLowerCase() === USER ? "white" : "black");
+const other = (s) => (s === "white" ? "black" : "white");
+const outcome = (g) => {
+  const r = g[side(g)].result;
+  return r === "win" ? "W" : DRAWS.has(r) ? "D" : "L";
+};
+
+// "Sicilian-Defense-Najdorf-Variation-6.Bg5" -> "Sicilian Defense"
+function openingName(eco) {
+  if (!eco) return "Other";
+  const words = decodeURIComponent(eco.split("/openings/")[1] || "").split("-");
+  const out = [];
+  for (const w of words) {
+    if (!w || /^\d/.test(w) || w.includes(".")) break;
+    out.push(w);
+    if (/^(Opening|Defense|Defence|Gambit|Game|Attack|System)$/.test(w) || out.length >= 4) break;
+  }
+  if (!out.length) return "Other";
+  return out.join(" ")
+    .replace(/\bQueens\b/g, "Queen's").replace(/\bKings\b/g, "King's").replace(/\bBishops\b/g, "Bishop's")
+    .replace(/\bAlekhines\b/g, "Alekhine's").replace(/\bPetrovs\b/g, "Petrov's").replace(/\bOwens\b/g, "Owen's")
+    .replace("Caro Kann", "Caro-Kann").replace("Nimzo Indian", "Nimzo-Indian").replace(/^Ruy Lopez Opening$/, "Ruy López");
+}
+
+let profile = null;
+async function loadProfile() {
+  if (profile || DEMO) return;
+  const [p, stats] = await Promise.all([getJson(`${API}${USER}`), getJson(`${API}${USER}/stats`)]);
+  profile = { name: p?.username || USER, title: p?.title || "", country: (p?.country || "").split("/").pop(), stats: stats || {} };
+}
+
+const flag = (code) => (/^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0))) : "");
+
+async function fetchSession() {
+  const today = new Date();
+  const thisMonth = await monthGames(today, false);
+  const start = new Date(session.start * 1000);
+  let games = thisMonth;
+  const sameMonth = start.getUTCMonth() === today.getUTCMonth() && start.getUTCFullYear() === today.getUTCFullYear();
+  if (!sameMonth) games = [...(await monthGames(start, true)), ...thisMonth];
+  let before = games.filter((g) => g.end_time < session.start);
+  const played = games.filter((g) => g.end_time >= session.start).sort((a, b) => a.end_time - b.end_time);
+  const latest = played.at(-1) || before.at(-1) || null;
+  const tc = TC === "auto" ? latest?.time_class || "blitz" : TC;
+  const inTc = played.filter((g) => g.time_class === tc);
+  let prior = before.filter((g) => g.time_class === tc).at(-1);
+  if (!prior) {
+    // The last game before the session may be in an earlier month.
+    const prev = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 15));
+    prior = (await monthGames(prev, true)).filter((g) => g.time_class === tc).at(-1);
+  }
+  return { tc, games: inTc, prior };
+}
+
+// ---- Stats from a session's games ----
+function summarise({ tc, games, prior }) {
+  const mine = games.map((g) => g[side(g)].rating);
+  const statRating = profile?.stats?.[`chess_${tc}`]?.last?.rating;
+  const start = prior ? prior[side(prior)].rating : games.length ? mine[0] : statRating ?? null;
+  const series = start == null ? mine : [start, ...mine];
+  const nowRating = mine.at(-1) ?? statRating ?? start;
+  const results = games.map(outcome);
+  let streak = "";
+  if (results.length) {
+    const last = results.at(-1);
+    let n = 0;
+    for (let i = results.length - 1; i >= 0 && results[i] === last; i--) n++;
+    streak = `${n}${last}`;
+  }
+  const openings = {};
+  for (const g of games) {
+    const name = openingName(g.eco);
+    const o = (openings[name] ||= { name, W: 0, D: 0, L: 0, n: 0 });
+    o[outcome(g)]++;
+    o.n++;
+  }
+  const opps = games.map((g) => g[other(side(g))].rating);
+  return {
+    tc, start, now: nowRating, series,
+    low: series.length ? Math.min(...series) : null,
+    games: games.length,
+    W: results.filter((r) => r === "W").length,
+    D: results.filter((r) => r === "D").length,
+    L: results.filter((r) => r === "L").length,
+    avgOpp: opps.length ? Math.round(opps.reduce((a, b) => a + b, 0) / opps.length) : null,
+    streak,
+    openings: Object.values(openings).sort((a, b) => b.n - a.n),
+    list: games,
+  };
+}
+
+function demoSummary() {
+  const series = [984, 991, 979, 986, 972, 980, 988, 983, 990, 995, 989, 996, 993, 999, 1003, 998, 1004, 1007];
+  return {
+    tc: "blitz", start: 984, now: 1007, series, low: 972, games: 18, W: 11, D: 3, L: 4, avgOpp: 996, streak: "3W",
+    openings: [
+      { name: "Sicilian Defense", n: 7, W: 4, D: 2, L: 1 }, { name: "Caro-Kann", n: 5, W: 3, D: 1, L: 1 },
+      { name: "Queen's Gambit", n: 3, W: 2, D: 0, L: 1 }, { name: "English Opening", n: 2, W: 1, D: 0, L: 1 },
+      { name: "Ruy López", n: 1, W: 1, D: 0, L: 0 },
+    ],
+  };
+}
+const demoWin = [52, 55, 50, 58, 54, 61, 57, 63, 48, 52, 66, 62, 70, 64, 73, 71, 79, 68, 81, 86, 84, 92, 90, 97, 99];
+const demoReview = {
+  sessionReviews: Array.from({ length: 18 }, (_, i) => ({ acc: [86, 79, 91, 72, 88][i % 5], counts: { inaccuracy: [3, 2, 1, 4][i % 4], mistake: i % 3 ? 0 : 1, blunder: i % 4 ? 0 : 1 } })),
+  last: { opp: "knightowl", oppRating: 1003, result: "W", opening: "Sicilian Defense", acc: 87.4, oppAcc: 76.1, winPercents: demoWin, marks: { 8: "blunder", 17: "mistake" },
+    change: 8, counts: { inaccuracy: 2, mistake: 1, blunder: 0 } },
+};
+const demoQuality = { brilliant: 3, great: 14, best: 61, excellent: 40, good: 28, inaccuracy: 11, mistake: 8, miss: 5, blunder: 4 };
+
+function qualityTotals() {
+  if (DEMO) return demoQuality;
+  const totals = {};
+  for (const q of session.quality) for (const [k, v] of Object.entries(q.counts)) totals[k] = (totals[k] || 0) + v;
+  return totals;
+}
+
+// ---- Rendering ----
+const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const TC_NAMES = { bullet: "Bullet", blitz: "Blitz", rapid: "Rapid", daily: "Daily" };
+
+function chart(series) {
+  const W = 600, H = 120, pad = 10;
+  if (series.length < 2) return `<svg class="chart" viewBox="0 0 ${W} ${H}"></svg>`;
+  const lo = Math.min(...series), hi = Math.max(...series), span = Math.max(hi - lo, 12);
+  const x = (i) => pad + (i * (W - 2 * pad)) / (series.length - 1);
+  const y = (v) => H - pad - ((v - lo) / span) * (H - 2 * pad - 10);
+  const pts = series.map((v, i) => [x(i), y(v)]);
+  // Smooth curve through the points (Catmull-Rom as cubic Béziers).
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += ` C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6},${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
+  }
+  const lowI = series.indexOf(Math.min(...series));
+  const last = pts.at(-1);
+  const up = series.at(-1) >= series[0];
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${up ? "#9ccf7a" : "#d98068"}" stop-opacity="0.35"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+      <linearGradient id="stroke" x1="0" x2="1"><stop offset="0" stop-color="#7fb069"/><stop offset="0.6" stop-color="#b7c96a"/><stop offset="1" stop-color="#e8c46a"/></linearGradient>
+    </defs>
+    <path d="${d} L${last[0]},${H} L${pts[0][0]},${H} Z" fill="url(#fill)"/>
+    <path d="${d}" fill="none" stroke="url(#stroke)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="${pts[lowI][0]}" cy="${pts[lowI][1]}" r="5" fill="#d8644f"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="9" fill="#e8c46a" opacity="0.35"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="5" fill="#f5dc8e"/>
+  </svg>`;
+}
+
+const accClass = (a) => (a == null ? "" : a >= 85 ? "acc-high" : a >= 70 ? "acc-mid" : "acc-low");
+
+// Win% after each move from the player's side: above the line is good for you.
+// Your mistakes and blunders are marked on the curve.
+function evalChart(wps, marks) {
+  const W = 600, H = 110;
+  const x = (i) => (i * W) / Math.max(1, wps.length - 1);
+  const y = (v) => H - (v / 100) * H;
+  const line = wps.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const area = `${line} L${W},${H / 2} L0,${H / 2} Z`;
+  const dots = Object.entries(marks).map(([i, j]) =>
+    `<circle cx="${x(+i).toFixed(1)}" cy="${y(wps[+i]).toFixed(1)}" r="4.5" fill="${QUALITY[j].colour}" stroke="#111" stroke-width="1"/>`).join("");
+  return `<svg class="evalchart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs>
+      <clipPath id="above"><rect x="0" y="0" width="${W}" height="${H / 2}"/></clipPath>
+      <clipPath id="below"><rect x="0" y="${H / 2}" width="${W}" height="${H / 2}"/></clipPath>
+    </defs>
+    <line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="rgba(255,255,255,0.2)" stroke-dasharray="4 4"/>
+    <path d="${area}" fill="rgba(127,176,105,0.35)" clip-path="url(#above)"/>
+    <path d="${area}" fill="rgba(200,100,79,0.35)" clip-path="url(#below)"/>
+    <path d="${line}" fill="none" stroke="#f3efe6" stroke-width="2" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
+// ---- Vertical card: rotates between views; a finished game takes over for a few seconds ----
+const CARD_SECONDS = 8, MOMENT_SECONDS = 12;
+let cardIndex = 0, lastCardView = "", moment = null; // { uuid, until }
+
+function lastGameInfo(s) {
+  if (DEMO) return demoReview.last;
+  const g = s.list.at(-1);
+  if (!g) return null;
+  const me = side(g), r = session.reviews[g.uuid];
+  const prev = s.list.at(-2);
+  const before = prev ? prev[side(prev)].rating : s.start;
+  return {
+    uuid: g.uuid, opp: g[other(me)].username, oppRating: g[other(me)].rating, result: outcome(g),
+    change: before != null ? g[me].rating - before : null,
+    acc: r?.acc, oppAcc: r?.oppAcc, winPercents: r?.winPercents, marks: r?.marks || {}, counts: r?.counts,
+  };
+}
+
+function sessionReviews(s) {
+  return DEMO ? demoReview.sessionReviews : s.list.map((g) => session.reviews[g.uuid]).filter((r) => r && !r.failed);
+}
+
+function cardView(s) {
+  const last = lastGameInfo(s);
+  if (moment && Date.now() < moment.until && last) {
+    const c = last.counts || { mistake: 0, blunder: 0 };
+    const verdict = c.blunder ? `${c.blunder} blunder${c.blunder === 1 ? "" : "s"}` : c.mistake ? `No blunders · ${c.mistake} mistake${c.mistake === 1 ? "" : "s"}` : "No mistakes. Clean game!";
+    const change = last.change == null ? "" : `<span class="delta ${last.change > 0 ? "up" : last.change < 0 ? "down" : "flat"}">${last.change > 0 ? "+" : ""}${last.change}</span>`;
+    return { name: "moment", html: `<div class="label">Game over · vs ${esc(last.opp)}</div>
+      <div class="row"><span class="big ${last.result}">${{ W: "Won!", L: "Lost", D: "Draw" }[last.result]}</span>${change}</div>
+      <div class="foot" style="margin-top:auto"><div><span>Accuracy </span>${last.acc?.toFixed(1) ?? "—"}%</div><div><span>vs </span>${last.oppAcc?.toFixed(1) ?? "—"}%</div></div>
+      <div class="note">${verdict}</div>` };
+  }
+  const views = [
+    () => {
+      const d = s.start != null && s.now != null ? s.now - s.start : 0;
+      return { name: "rating", html: `<div class="label">Rating · ${TC_NAMES[s.tc] || s.tc}</div>
+        <div class="row"><span class="big">${s.now ?? "—"}</span><span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${d > 0 ? "▲ +" : d < 0 ? "▼ −" : "± "}${Math.abs(d)}</span></div>
+        ${chart(s.series)}` };
+    },
+    () => last && last.winPercents && {
+      name: "lastgame", html: `<div class="label">Last game</div>
+        <div class="vsline">vs ${esc(last.opp)} <span>(${last.oppRating})</span> <span class="result ${last.result}">${{ W: "Won", L: "Lost", D: "Draw" }[last.result]}</span></div>
+        ${evalChart(last.winPercents, last.marks)}
+        <div class="foot"><div><span>You </span>${last.acc?.toFixed(1) ?? "—"}%</div><div><span>Opp </span>${last.oppAcc?.toFixed(1) ?? "—"}%</div></div>` },
+    () => {
+      const reviews = sessionReviews(s);
+      if (!reviews.length) return null;
+      const acc = reviews.reduce((a, r) => a + r.acc, 0) / reviews.length;
+      const t = { inaccuracy: 0, mistake: 0, blunder: 0 };
+      for (const r of reviews) for (const k in t) t[k] += r.counts[k];
+      return { name: "review", html: `<div class="label">Session · ${s.games} game${s.games === 1 ? "" : "s"}</div>
+        <div class="row"><span class="big ${accClass(acc)}">${acc.toFixed(1)}%</span><span class="sub">avg accuracy</span></div>
+        <div class="counts">${["inaccuracy", "mistake", "blunder"].map((k) => `<div><span class="badge" style="background:${QUALITY[k].colour}">${QUALITY[k].glyph}</span>${t[k]}</div>`).join("")}</div>` };
+    },
+  ];
+  for (let i = 0; i < views.length; i++) {
+    const v = views[(cardIndex + i) % views.length]();
+    if (v) return v;
+  }
+  return views[0]();
+}
+
+const panels = {
+  player(s) {
+    const name = DEMO ? "pieceofmind" : profile?.name || USER;
+    const p = h("div", "panel player");
+    p.innerHTML = `<span class="pawn">♟</span>${profile?.title ? `<span class="title">${esc(profile.title)}</span>` : ""}
+      <span class="name">${esc(name)}</span><span class="rating">(${s.now ?? "—"})</span>
+      <span class="flag">${DEMO ? "🇺🇸" : flag(profile?.country)}</span>`;
+    return p;
+  },
+  rating(s) {
+    const d = s.start != null && s.now != null ? s.now - s.start : 0;
+    const p = h("div", "panel rating-card");
+    p.innerHTML = `<div class="label">Rating <small>(${TC_NAMES[s.tc] || s.tc} session)</small></div>
+      <div class="rating-head"><span class="num rating-now">${s.now ?? "—"}</span>
+        <span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${d > 0 ? "▲ +" : d < 0 ? "▼ −" : "± "}${Math.abs(d)}</span></div>
+      ${chart(s.series)}
+      <div class="ends"><div><span>Start</span><b>${s.start ?? "—"}</b></div>
+        <div class="low"><span>Low</span><b>${s.low ?? "—"}</b></div>
+        <div class="now"><span>Now</span><b>${s.now ?? "—"}</b></div></div>`;
+    return p;
+  },
+  stats(s) {
+    const p = h("div", "panel stats");
+    const streak = s.streak ? `<span class="streak-${s.streak.at(-1)}">${s.streak}</span>` : "—";
+    p.innerHTML = [
+      ["🂠", s.games, "Games"],
+      ["🏆", `${s.W}W ${s.D}D ${s.L}L`, "Score"],
+      ["⚔", s.avgOpp ?? "—", "Avg Opp. Rating"],
+      ["🔥", streak, "Current Streak"],
+    ].map(([icon, n, sub]) => `<div class="stat"><span class="icon">${icon}</span><div><div class="num">${n}</div><div class="sub">${sub}</div></div></div>`).join("");
+    return p;
+  },
+  openings(s) {
+    const p = h("div", "panel");
+    p.innerHTML = `<div class="openings-head"><span class="label">Openings this session</span><i>${s.games} game${s.games === 1 ? "" : "s"}</i></div>`;
+    if (!s.openings.length) p.append(h("div", "message", "No games yet. Good luck!"));
+    const top = s.openings.slice(0, 5);
+    const rest = s.openings.slice(5).reduce((a, o) => ({ ...a, n: a.n + o.n, W: a.W + o.W, D: a.D + o.D, L: a.L + o.L }), { name: "Other", n: 0, W: 0, D: 0, L: 0 });
+    const rows = rest.n ? [...top, rest] : top;
+    const most = Math.max(1, ...rows.map((o) => o.n));
+    rows.forEach((o, i) => {
+      const width = (o.n / most) * 100;
+      const seg = (k, c) => (o[k] ? `<span style="width:${(o[k] / o.n) * 100}%;background:${c}"></span>` : "");
+      p.append(h("div", "opening", `<span class="dot" style="background:${o.name === "Other" ? "#999" : OPENING_COLOURS[i % OPENING_COLOURS.length]}"></span>
+        <span class="name">${esc(o.name)}</span><span class="count">${o.n}</span>
+        <div class="bar" style="width:${width}%">${seg("W", "var(--win)")}${seg("D", "var(--draw)")}${seg("L", "var(--loss)")}</div>
+        <span class="pct">${Math.round((o.n / s.games) * 100)}%</span>`));
+    });
+    return p;
+  },
+  review(s) {
+    const reviews = DEMO ? demoReview.sessionReviews : s.list.map((g) => session.reviews[g.uuid]).filter((r) => r && !r.failed);
+    const p = h("div", "panel");
+    const pending = DEMO ? 0 : s.list.filter((g) => !session.reviews[g.uuid]).length;
+    const status = analysing ? `Analysing game… ${Math.round(analysing.progress * 100)}%` : pending ? `${pending} to analyse` : reviews.length ? "Stockfish · Lichess formulas" : "";
+    p.innerHTML = `<div class="review-head"><span class="label">Engine review <small>(session)</small></span><i>${status}</i></div>`;
+    const totals = { inaccuracy: 0, mistake: 0, blunder: 0 };
+    for (const r of reviews) for (const k in totals) totals[k] += r.counts[k];
+    const acc = reviews.length ? reviews.reduce((a, r) => a + r.acc, 0) / reviews.length : null;
+    const row = h("div", "quality");
+    row.append(h("div", "q acc", `<div class="top"><span class="num ${accClass(acc)}">${acc == null ? "—" : acc.toFixed(1)}<small>%</small></span></div><div class="sub">Avg Accuracy</div>`));
+    for (const k of ["inaccuracy", "mistake", "blunder"]) {
+      const q = QUALITY[k];
+      const n = totals[k];
+      row.append(h("div", "q", `<div class="top"><span class="badge" style="background:${q.colour}">${q.glyph}</span><span class="num">${n}</span></div><div class="sub">${n === 1 ? q.one : q.label}</div>`));
+    }
+    p.append(row);
+    return p;
+  },
+  lastgame(s) {
+    let info;
+    if (DEMO) info = demoReview.last;
+    else {
+      const g = s.list.at(-1);
+      if (!g) return h("div", "panel lastgame", `<div class="label">Last game</div><div class="message">Waiting for your first game.</div>`);
+      const me = side(g), r = session.reviews[g.uuid];
+      info = {
+        opp: g[other(me)].username, oppRating: g[other(me)].rating, result: outcome(g), opening: openingName(g.eco),
+        acc: r?.acc, oppAcc: r?.oppAcc, winPercents: r?.winPercents, marks: r?.marks || {},
+      };
+    }
+    const p = h("div", "panel lastgame");
+    p.innerHTML = `<div class="label">Last game</div>
+      <div class="vs"><div><b>vs ${esc(info.opp)}</b> <span>(${info.oppRating})</span><span class="result ${info.result}">${{ W: "Won", L: "Lost", D: "Draw" }[info.result]}</span></div><span>${esc(info.opening)}</span></div>
+      ${info.winPercents ? evalChart(info.winPercents, info.marks) : `<div class="hint">${analysing ? `Analysing… ${Math.round(analysing.progress * 100)}%` : "Analysis coming up."}</div>`}
+      <div class="accs"><div><span>Your accuracy </span>${info.acc == null ? "—" : info.acc.toFixed(1) + "%"}</div><div><span>Opponent </span>${info.oppAcc == null ? "—" : info.oppAcc.toFixed(1) + "%"}</div></div>`;
+    return p;
+  },
+  ticker(s) {
+    const d = s.start != null && s.now != null ? s.now - s.start : 0;
+    const streak = s.streak ? `<span class="streak-${s.streak.at(-1)}">🔥${s.streak}</span>` : "";
+    return h("div", "panel ticker", `<span>♟ ${s.now ?? "—"}</span>
+      <span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${d > 0 ? "▲" : d < 0 ? "▼" : "±"}${Math.abs(d)}</span>
+      <span class="sep">·</span><span>${s.W}W ${s.D}D ${s.L}L</span>${streak ? `<span class="sep">·</span>${streak}` : ""}`);
+  },
+  card(s) {
+    const view = cardView(s);
+    const p = h("div", `panel card${view.name === "moment" ? " moment" : ""}${view.name !== lastCardView ? " fade" : ""}`);
+    lastCardView = view.name;
+    p.innerHTML = view.html;
+    return p;
+  },
+  quality() {
+    const totals = qualityTotals();
+    const p = h("div", "panel");
+    p.innerHTML = `<div class="label">Move quality <small>(session)</small></div>`;
+    const row = h("div", "quality");
+    for (const k of QUALITY_SHOWN) {
+      const q = QUALITY[k];
+      if (!q) continue;
+      const n = totals[k] || 0;
+      const cell = h("div", "q", `<div class="top"><span class="badge" style="background:${q.colour}">${q.glyph}</span><span class="num">${n}</span></div><div class="sub">${n === 1 ? q.one : q.label}</div>`);
+      cell.dataset.key = k;
+      row.append(cell);
+    }
+    p.append(row);
+    if (!DEMO && !session.quality.length) p.append(h("div", "hint", "Counts appear after each game, from chess.com's post-game summary."));
+    return p;
+  },
+};
+
+let lastSummary = null;
+function render(summary, bumped = []) {
+  lastSummary = summary;
+  const root = document.getElementById("root");
+  root.replaceChildren(...SHOW.filter((k) => panels[k]).map((k) => panels[k](summary)));
+  for (const k of bumped) root.querySelector(`.q[data-key="${k}"]`)?.classList.add("bump");
+}
+
+function message(text) {
+  document.getElementById("root").replaceChildren(h("div", "panel message", esc(text)));
+}
+
+function toast(text) {
+  const t = document.getElementById("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+// ---- Engine review: one game at a time, newest first, after it has finished ----
+let engine = null;
+let analysing = null; // { uuid, progress }
+async function analyseSession(summary) {
+  if (!ENGINE_ON || analysing) return;
+  const todo = summary.list.filter((g) => !session.reviews[g.uuid] && g.pgn).reverse();
+  if (!todo.length) return;
+  engine ||= new Engine(DEPTH);
+  for (const g of todo) {
+    analysing = { uuid: g.uuid, progress: 0 };
+    render(lastSummary);
+    try {
+      await engine.start();
+      let lastPaint = 0;
+      const r = await analyseGame(engine, g.pgn, (progress) => {
+        analysing.progress = progress;
+        if (Date.now() - lastPaint > 1000) { lastPaint = Date.now(); render(lastSummary); }
+      });
+      const me = side(g)[0], them = me === "w" ? "b" : "w";
+      const mine = r.winPercents.map((v) => Math.round((me === "w" ? v : 100 - v) * 10) / 10);
+      const marks = {};
+      r.judgements.forEach((j, i) => {
+        if ((j === "mistake" || j === "blunder") && (i % 2 === 0 ? "w" : "b") === me) marks[i + 1] = j;
+      });
+      session.reviews[g.uuid] = {
+        acc: r.accuracy[me], oppAcc: r.accuracy[them], counts: r.counts[me],
+        winPercents: mine, marks, judgements: r.judgements,
+      };
+      saveSession();
+      // A game that finished while the overlay was up gets its moment on the card.
+      if (g === summary.list.at(-1) && g.end_time >= BOOT - 60) {
+        moment = { uuid: g.uuid, until: Date.now() + MOMENT_SECONDS * 1000 };
+        setTimeout(() => lastSummary && render(lastSummary), MOMENT_SECONDS * 1000 + 50);
+      }
+    } catch (e) {
+      console.error("analysis failed", g.url, e);
+      session.reviews[g.uuid] = { failed: true, acc: null, counts: { inaccuracy: 0, mistake: 0, blunder: 0 } };
+    }
+  }
+  analysing = null;
+  render(lastSummary);
+}
+
+async function refresh() {
+  try {
+    await loadProfile();
+    const data = await fetchSession();
+    const last = data.games.at(-1)?.end_time;
+    if (last && last > session.last) { session.last = last; saveSession(); }
+    const summary = summarise(data);
+    render(summary);
+    analyseSession(summary);
+  } catch (e) {
+    console.error(e);
+    if (!lastSummary) message(`Couldn't load games for "${USER}". Check the username.`);
+  }
+}
+
+// ---- Move-quality counts relayed by the extension through OBS's WebSocket server ----
+async function sha256b64(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+function connectObs() {
+  let ws;
+  try { ws = new WebSocket(`ws://127.0.0.1:${PORT}`); } catch { return; }
+  ws.onmessage = async (msg) => {
+    const { op, d } = JSON.parse(msg.data);
+    if (op === 0) { // Hello
+      const identify = { rpcVersion: 1, eventSubscriptions: 1 }; // General events carry CustomEvent
+      if (d.authentication) {
+        identify.authentication = await sha256b64((await sha256b64(PASSWORD + d.authentication.salt)) + d.authentication.challenge);
+      }
+      ws.send(JSON.stringify({ op: 1, d: identify }));
+    } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.pom) {
+      const e = d.eventData;
+      if (e.pom === "test") toast("Piece of Mind connected");
+      // A full review of a game (all categories) replaces its post-game three.
+      const known = session.quality.find((q) => q.key === e.key);
+      if (e.pom === "postgame" && e.counts && (!known || (e.full && !known.full))) {
+        if (known) session.quality.splice(session.quality.indexOf(known), 1);
+        session.quality.push({ key: e.key, at: known?.at ?? now(), counts: e.counts, full: !!e.full });
+        session.last = now();
+        saveSession();
+        if (lastSummary) render(lastSummary, Object.keys(e.counts));
+        setTimeout(refresh, 3000); // the finished game shows up in chess.com's data within seconds
+      }
+    }
+  };
+  ws.onclose = (e) => {
+    if (e.code === 4009) { toast("OBS WebSocket password is wrong"); return; }
+    setTimeout(connectObs, 5000);
+  };
+}
+
+if (SHOW.includes("card")) {
+  setInterval(() => {
+    if (moment && Date.now() < moment.until) return;
+    cardIndex++;
+    if (lastSummary) render(lastSummary);
+  }, CARD_SECONDS * 1000);
+}
+if (DEMO && params.has("moment")) moment = { uuid: "demo", until: Infinity };
+
+if (DEMO) {
+  render(demoSummary());
+} else if (!USER) {
+  message("Add ?user=YOUR_CHESS_COM_NAME to this overlay's URL.");
+} else {
+  message("Loading…");
+  refresh();
+  setInterval(refresh, 20000);
+  if (SHOW.includes("quality")) connectObs();
+}
+</script>
+</body>
+</html>
