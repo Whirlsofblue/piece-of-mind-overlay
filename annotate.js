@@ -115,8 +115,9 @@ function resultOf(g) {
 }
 
 // One game, annotated. `g` is the chess.com game, `r` its analyseGame() result, `opening`
-// its openingReport() (or null), `me` "w" or "b".
-export function annotatedPgn(g, r, opening, me) {
+// its openingReport() (or null), `me` "w" or "b", and `moments` { ply: { comment, variations } }
+// for the critical moments (moments.js), which replace that move's usual note and line.
+export function annotatedPgn(g, r, opening, me, moments = {}) {
   const date = new Date(g.end_time * 1000);
   const ymd = `${date.getUTCFullYear()}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.${String(date.getUTCDate()).padStart(2, "0")}`;
   const headers = {
@@ -149,20 +150,19 @@ export function annotatedPgn(g, r, opening, me) {
     force = false;
     const notes = [];
     if (clk[i]) notes.push(`[%clk ${clk[i]}]`);
-    if (j) {
+    if (moments[i]) notes.push(moments[i].comment);
+    else if (j) {
       const best = toSan(fens[i], [r.bests[i]])[0];
       const before = i === 0 ? { cp: 15 } : r.scores[i - 1];
       notes.push(`(${evalText(before)} → ${evalText(r.scores[i])}) ${NAME[j]}.${best ? ` ${best} was best.` : ""}`);
     }
     if (opening?.deviation?.ply === i) notes.push(deviationText(opening.deviation, opening.deviation.colour === me));
     if (notes.length) { text += `{ ${clean(notes.join(" "))} } `; force = true; }
-    if (j && r.pvs[i]?.length) {
-      // The engine's line instead, as a variation.
-      const line = toSan(fens[i], r.pvs[i], 8);
-      if (line.length) {
-        text += `(${line.map((s, k) => `${prefix(i + k, k === 0)}${s}`).join(" ")}) `;
-        force = true;
-      }
+    // The engine's better line(s) instead, as variations: its top three at a critical moment.
+    const lines = moments[i] ? moments[i].variations : j && r.pvs[i]?.length ? [toSan(fens[i], r.pvs[i], 8)] : [];
+    for (const line of lines.filter((l) => l.length)) {
+      text += `(${line.map((s, k) => `${prefix(i + k, k === 0)}${s}`).join(" ")}) `;
+      force = true;
     }
   });
   text += headers.Result;

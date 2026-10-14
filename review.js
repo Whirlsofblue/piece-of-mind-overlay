@@ -129,6 +129,27 @@ export class Engine {
     return { score, best, pv };
   }
 
+  // The engine's top `count` moves in a position, searched to `depth`: [{ score, pv }], best first,
+  // scores from White's point of view. Used for the deeper look at critical moments.
+  async lines(moves, whiteToMove, depth, count = 3) {
+    const found = [];
+    this.worker.postMessage(`setoption name MultiPV value ${count}`);
+    await new Promise((resolve) => {
+      this.listener = (line) => {
+        const m = line.match(/^info .*\bmultipv (\d+) .*\bscore (cp|mate) (-?\d+)(?!.*\b(?:lowerbound|upperbound)\b).*\bpv (.+)$/);
+        if (m) {
+          const v = Number(m[3]) * (whiteToMove ? 1 : -1);
+          found[Number(m[1]) - 1] = { score: m[2] === "cp" ? { cp: v } : { mate: v }, pv: m[4].trim().split(/\s+/) };
+        }
+        if (line.startsWith("bestmove")) { this.listener = null; resolve(); }
+      };
+      this.worker.postMessage(`position startpos${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
+      this.worker.postMessage(`go depth ${depth}`);
+    });
+    this.worker.postMessage("setoption name MultiPV value 1");
+    return found.filter(Boolean);
+  }
+
   stop() { this.worker?.terminate(); this.worker = null; }
 }
 

@@ -78,6 +78,9 @@
         <select id="visibility"><option value="unlisted" selected>Unlisted (anyone with the link)</option><option value="private">Private</option><option value="public">Public</option></select></label>
     </div>
     <label class="check"><input type="checkbox" id="openings" checked><span>Opening notes and quizzes<small>Where each game left the moves strong players usually choose, plus a one-move quiz chapter whenever it was you.</small></span></label>
+    <label class="check"><input type="checkbox" id="moments" checked><span>Critical moments<small>The 2–3 moves that decided each game, looked at more deeply, with the engine's top three moves there.</small></span></label>
+    <label class="check"><input type="checkbox" id="puzzles" checked><span>Puzzles from your games<small>Wherever only one move worked and you missed it, a one-move puzzle chapter.</small></span></label>
+    <label class="check"><input type="checkbox" id="collectPuzzles" checked><span>Add puzzles to “My puzzles”<small>A private study that grows every session, like My openings.</small></span></label>
     <label class="check"><input type="checkbox" id="repertoire" checked><span>Add quizzes to “My openings”<small>One private study that grows every session: a repertoire built from your own games. Positions already in it aren't added twice.</small></span></label>
     <button class="secondary" id="find">Find games</button>
     <ul class="games" id="games"></ul>
@@ -93,7 +96,8 @@
 
 <script type="module">
 import { Engine, analyseGame } from "./review.js";
-import { annotatedPgn, openingReport, openingQuiz } from "./annotate.js";
+import { annotatedPgn, openingReport, openingQuiz, fensBefore } from "./annotate.js";
+import { criticalPlies, deepLines, isOnlyMove, momentNotes, puzzlePgn } from "./moments.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -212,8 +216,8 @@ async function removeEmptyFirstChapter(studyId) {
   } catch {}
 }
 
-// ---- "My openings": one growing study of quiz chapters across sessions ----
-const REPERTOIRE = "My openings · Piece of Mind";
+// ---- Growing collections: "My openings" and "My puzzles", one private study each ----
+const COLLECTIONS = { openings: "My openings · Piece of Mind", puzzles: "My puzzles · Piece of Mind" };
 const fenKey = (fen) => fen.split(" ").slice(0, 4).join(" "); // position + side, castling, en passant
 
 async function myStudies() {
@@ -222,11 +226,11 @@ async function myStudies() {
   return (await r.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
 
-// Adds quiz chapters to the newest "My openings" study with room, skipping positions it
-// already has; starts "My openings · Piece of Mind 2" (3, ...) when one fills up (64 chapters).
-async function addToRepertoire(quizzes) {
-  const mine = (await myStudies()).filter((st) => st.name.startsWith(REPERTOIRE))
-    .sort((a, b) => (parseInt(a.name.slice(REPERTOIRE.length)) || 1) - (parseInt(b.name.slice(REPERTOIRE.length)) || 1));
+// Adds lesson chapters to the newest study of the collection with room, skipping positions it
+// already has; starts "<name> 2" (3, ...) when one fills up (64 chapters).
+async function addToCollection(base, lessons) {
+  const mine = (await myStudies()).filter((st) => st.name.startsWith(base))
+    .sort((a, b) => (parseInt(a.name.slice(base.length)) || 1) - (parseInt(b.name.slice(base.length)) || 1));
   const seen = new Set();
   let target = null, count = 0;
   for (const st of mine) {
@@ -235,12 +239,12 @@ async function addToRepertoire(quizzes) {
     target = st;
     count = (pgn.match(/\[ChapterName /g) || []).length;
   }
-  const fresh = quizzes.filter((q) => !seen.has(fenKey(q.pgn.match(/\[FEN "([^"]+)"\]/)[1])));
+  const fresh = lessons.filter((q) => !seen.has(fenKey(q.pgn.match(/\[FEN "([^"]+)"\]/)[1])));
   let added = 0;
   const created = [];
   for (const q of fresh) {
     if (!target || count >= 64) {
-      const name = mine.length === 0 ? REPERTOIRE : `${REPERTOIRE} ${mine.length + 1}`;
+      const name = mine.length === 0 ? base : `${base} ${mine.length + 1}`;
       target = await lichess("/api/study", {
         name, visibility: "private", computer: "everyone", explorer: "everyone", cloneable: "owner", shareable: "owner", chat: "nobody", sticky: "false",
       });
@@ -254,24 +258,59 @@ async function addToRepertoire(quizzes) {
     added++;
   }
   for (const id of created) await removeEmptyFirstChapter(id);
-  return { added, skipped: quizzes.length - fresh.length, study: target };
+  return { added, skipped: lessons.length - fresh.length, study: target };
 }
+
+async function collect(key, label, lessons) {
+  if (!lessons.length) return "";
+  try {
+    log(`Adding to “${label}”…`);
+    const res = await addToCollection(COLLECTIONS[key], lessons);
+    if (!res.study) return ` All ${res.skipped} position${res.skipped === 1 ? " was" : "s were"} already in ${label}.`;
+    return ` ${res.added} new position${res.added === 1 ? "" : "s"} added to <a href="${LICHESS}/study/${res.study.id}" target="_blank" rel="noopener">${label}</a>${res.skipped ? ` (${res.skipped} already there)` : ""}.`;
+  } catch (e) {
+    log(`${label} wasn't updated: ${e.message}. Log out and in again if this keeps happening.`, true);
+    return "";
+  }
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 $("create").onclick = async () => {
   $("create").disabled = true;
   $("log").replaceChildren();
   const bar = $("progress");
   bar.hidden = false;
-  const engine = new Engine(Number(new URLSearchParams(location.search).get("depth")) || 18);
-  const withOpenings = $("openings").checked;
-  const chapters = [], quizzes = [];
+  const depth = Number(new URLSearchParams(location.search).get("depth")) || 18;
+  const engine = new Engine(depth);
+  const withOpenings = $("openings").checked, withMoments = $("moments").checked, withPuzzles = $("puzzles").checked;
+  const chapters = [], quizzes = [], puzzles = [];
   const totals = { W: 0, D: 0, L: 0, acc: [] };
   try {
     await engine.start();
     for (const [n, g] of games.entries()) {
       const me = sideOf(g), opp = g[me === "w" ? "black" : "white"].username;
+      const orientation = me === "w" ? "white" : "black";
       log(`Analysing game ${n + 1} of ${games.length} (vs ${opp})…`);
-      const r = await analyseGame(engine, g.pgn, (p) => { bar.value = (n + p) / games.length; });
+      const r = await analyseGame(engine, g.pgn, (p) => { bar.value = (n + p * 0.8) / games.length; });
+      const fens = fensBefore(r.uci);
+
+      // A deeper look where the game was decided, and puzzles where one move was the answer.
+      const moments = {};
+      if (withMoments || withPuzzles) {
+        const critical = criticalPlies(r, me);
+        const missed = r.judgements.map((j, i) => (j === "mistake" || j === "blunder") && (i % 2 === 0 ? "w" : "b") === me ? i : -1).filter((i) => i >= 0);
+        const looks = [...new Set([...critical, ...(withPuzzles ? missed : [])])].slice(0, 5);
+        for (const [k, ply] of looks.entries()) {
+          const look = await deepLines(engine, r, fens, ply, depth + 4, 3);
+          bar.value = (n + 0.8 + 0.2 * (k + 1) / looks.length) / games.length;
+          if (withMoments && critical.includes(ply)) moments[ply] = momentNotes(r, fens, ply, look, me);
+          if (withPuzzles && isOnlyMove(look.lines, me)) {
+            puzzles.push({ name: `Puzzle: vs ${opp}, move ${Math.floor(ply / 2) + 1}`.slice(0, 100), pgn: puzzlePgn(g, r, fens, ply, look, me), orientation, mode: "gamebook" });
+          }
+        }
+      }
+
       let opening = null;
       if (withOpenings) {
         try { opening = await openingReport(token, r.uci, r.moves, g.time_class); }
@@ -281,9 +320,9 @@ $("create").onclick = async () => {
       totals[res]++;
       totals.acc.push(r.accuracy[me]);
       const name = `${{ W: "Won", L: "Lost", D: "Drew" }[res]} vs ${opp}${opening?.name ? ` · ${opening.name.split(":")[0]}` : ""}`.slice(0, 100);
-      chapters.push({ name, pgn: annotatedPgn(g, r, opening, me), orientation: me === "w" ? "white" : "black" });
+      chapters.push({ name, pgn: annotatedPgn(g, r, opening, me, moments), orientation });
       const quiz = openingQuiz(g, r, opening, me);
-      if (quiz) quizzes.push({ name: `Quiz: ${opening.name ? opening.name.split(":")[0] : "opening"} (move ${Math.floor(opening.deviation.ply / 2) + 1})`.slice(0, 100), pgn: quiz, orientation: me === "w" ? "white" : "black", mode: "gamebook" });
+      if (quiz) quizzes.push({ name: `Quiz: ${opening.name ? opening.name.split(":")[0] : "opening"} (move ${Math.floor(opening.deviation.ply / 2) + 1})`.slice(0, 100), pgn: quiz, orientation, mode: "gamebook" });
     }
     engine.stop();
     bar.value = 1;
@@ -297,26 +336,22 @@ $("create").onclick = async () => {
     const avg = totals.acc.reduce((a, b) => a + b, 0) / totals.acc.length;
     const summary = `[Event "Session summary"]\n[Result "*"]\n\n{ ${games.length} games: ${totals.W} won, ${totals.D} drawn, ${totals.L} lost. Average accuracy ${avg.toFixed(1)}%. ` +
       `Each game is annotated with ?! ? ?? where the engine disagreed, with its better line as a variation.` +
-      (quizzes.length ? ` The quiz chapters at the end are positions from your openings: find the move strong players choose.` : "") + ` } *\n`;
-    const all = [{ name: "Session summary", pgn: summary }, ...chapters, ...quizzes].slice(0, 63);
+      (withMoments ? ` 🔑 marks the moments that decided each game, with the engine's top three moves there.` : "") +
+      (puzzles.length ? ` The puzzle chapters are positions from your games where only one move worked: find it.` : "") +
+      (quizzes.length ? ` The quiz chapters are positions from your openings: find the move strong players choose.` : "") + ` } *\n`;
+    const all = [{ name: "Session summary", pgn: summary }, ...chapters, ...puzzles, ...quizzes].slice(0, 63);
     for (const [i, c] of all.entries()) {
       log(`Adding chapter ${i + 1} of ${all.length}: ${c.name}`);
       await lichess(`/api/study/${study.id}/import-pgn`, { pgn: c.pgn, name: c.name, ...(c.orientation && { orientation: c.orientation }), ...(c.mode && { mode: c.mode }) });
     }
     await removeEmptyFirstChapter(study.id);
-    let repertoireNote = "";
-    if ($("repertoire").checked && quizzes.length) {
-      try {
-        log("Adding quizzes to “My openings”…");
-        const rep = await addToRepertoire(quizzes);
-        if (rep.study) repertoireNote = ` ${rep.added} new position${rep.added === 1 ? "" : "s"} added to <a href="${LICHESS}/study/${rep.study.id}" target="_blank" rel="noopener">My openings</a>${rep.skipped ? ` (${rep.skipped} already there)` : ""}.`;
-        else repertoireNote = ` All ${rep.skipped} quiz position${rep.skipped === 1 ? " was" : "s were"} already in My openings.`;
-      } catch (e) { log(`My openings wasn't updated: ${e.message}. Log out and in again if this keeps happening.`, true); }
-    }
+    let notes = "";
+    if ($("repertoire").checked) notes += await collect("openings", "My openings", quizzes);
+    if ($("collectPuzzles").checked) notes += await collect("puzzles", "My puzzles", puzzles);
     const url = `${LICHESS}/study/${study.id}`;
     const done = document.createElement("div");
     done.className = "done";
-    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${chapters.length} games, ${quizzes.length} quiz${quizzes.length === 1 ? "" : "zes"}).${repertoireNote}`;
+    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${plural(chapters.length, "game")}, ${plural(puzzles.length, "puzzle")}, ${plural(quizzes.length, "quiz", "quizzes")}).${notes}`;
     $("log").append(done);
   } catch (e) {
     console.error(e);

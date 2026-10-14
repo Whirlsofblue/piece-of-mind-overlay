@@ -62,6 +62,12 @@ a note where each game left the moves 2000+ players usually choose (from the Lic
 explorer). When it was you who left that path, a one-move quiz chapter is added at the end.
 Quizzes also go into one private, growing study, "My openings · Piece of Mind" (then "… 2"
 when it reaches Lichess's 64-chapter limit). Positions already there aren't added again.
+
+**Critical moments:** the 2–3 moves that cost each game the most get a deeper look (Lichess's
+cloud evaluation when it has the position, otherwise Stockfish searching deeper) with the
+engine's top three moves as variations, marked 🔑.
+**Puzzles:** wherever only one move worked (clearly better than the second best, Lichess-puzzle
+style) and you missed it, a one-move interactive chapter; they also collect in "My puzzles".
 The Lichess login stays in your browser and can be revoked at lichess.org/account/oauth/token.
 
 ## Notes
