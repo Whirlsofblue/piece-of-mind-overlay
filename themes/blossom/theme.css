@@ -4,6 +4,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Lato:wght@400;700&display=swap");
 
 body.theme-blossom {
+  --theme-script: 1; /* theme.js draws the frames */
   --panel: transparent;
   --line: rgba(196, 140, 120, 0.3);
   --ink: #3e2532;

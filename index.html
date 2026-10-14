@@ -23,6 +23,9 @@
     tc=auto          time class: auto (follows your latest game), bullet, blitz, rapid or daily
     reset            start a new session now (otherwise a new one starts after 6 hours without games)
     since=3          count the last 3 hours as this session (e.g. after starting the overlay late)
+    theme=classic    look: classic, holo, grove, blossom or clean (one accent colour, no decoration)
+    accent=5b8cff    accent colour for themes that use one (clean)
+    light            light panels with dark text (clean)
     font=bricolage   display font: bricolage (default), classic (Cormorant Garamond), fraunces, outfit, nunito or grotesk
     demo             made-up numbers, for placing the overlay before you play
     bg               dark background, for previewing in a normal browser
@@ -206,8 +209,15 @@ if (THEME !== "classic") {
   const sheet = Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${THEME}/theme.css` });
   await new Promise((done) => { sheet.onload = sheet.onerror = done; document.head.append(sheet); });
   document.body.classList.add(`theme-${THEME}`);
-  theme = await import(`./themes/${THEME}/theme.js`).catch(() => ({}));
+  // A theme with drawing code says so in its stylesheet: body.theme-x { --theme-script: 1; }
+  if (getComputedStyle(document.body).getPropertyValue("--theme-script").trim()) {
+    theme = await import(`./themes/${THEME}/theme.js`).catch(() => ({}));
+  }
 }
+// accent=ff5a5f: the streamer's colour, as --accent (themes that use it: clean). light: light panels.
+const ACCENT = (params.get("accent") || "").replace(/^#/, "");
+if (/^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(ACCENT)) document.body.style.setProperty("--accent", `#${ACCENT}`); // on body, so it beats a theme's default
+if (params.has("light")) document.body.classList.add("light");
 // A theme brings its own fonts; font= still overrides. Bricolage is the classic theme's default.
 const FONT = FONTS[params.get("font") || (THEME === "classic" ? "bricolage" : "")];
 if (FONT) {

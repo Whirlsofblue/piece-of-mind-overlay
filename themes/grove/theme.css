@@ -3,6 +3,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap");
 
 body.theme-grove {
+  --theme-script: 1; /* theme.js draws the frames */
   --panel: transparent;
   --line: rgba(231, 194, 106, 0.28);
   --ink: #f4f1e3;

@@ -1,0 +1,106 @@
+/* Clean: flat, crisp panels, one accent colour (accent=RRGGBB), no decoration. Readable first.
+   Dark by default; add "light" to the URL for white panels. */
+body.theme-clean {
+  --accent: #5b8cff;
+  --panel: rgba(16, 17, 21, 0.86);
+  --line: rgba(255, 255, 255, 0.08);
+  --ink: #f4f5f7;
+  --muted: rgba(244, 245, 247, 0.6);
+  --gold: var(--accent);
+  --win: #3ecf8e;
+  --draw: #a3a8b3;
+  --loss: #ff5d6c;
+  --serif: Inter, system-ui, sans-serif;
+  --sans: Inter, system-ui, sans-serif;
+  --chart-1: color-mix(in srgb, var(--accent) 55%, transparent);
+  --chart-2: var(--accent);
+  --chart-3: color-mix(in srgb, var(--accent) 70%, white);
+  --chart-now: color-mix(in srgb, var(--accent) 40%, white);
+  --chart-low: var(--loss);
+  --chart-fill-up: var(--accent); --chart-fill-down: var(--accent); --chart-fill-opacity: 0.22;
+  --eval-good: color-mix(in srgb, var(--win) 28%, transparent);
+  --eval-bad: color-mix(in srgb, var(--loss) 28%, transparent);
+  --eval-line: var(--ink);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+body.theme-clean.light {
+  --panel: rgba(255, 255, 255, 0.92);
+  --line: rgba(16, 17, 21, 0.08);
+  --ink: #15171c;
+  --muted: rgba(21, 23, 28, 0.58);
+  --draw: #8a8f99;
+  --win: #16a06a; /* deeper so they read on white */
+  --loss: #e0475a;
+  --chart-3: color-mix(in srgb, var(--accent) 80%, black);
+  --chart-now: var(--accent);
+}
+
+.theme-clean .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.theme-clean.light .panel { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1); }
+
+/* Labels: small caps-style text with an accent mark. */
+.theme-clean .label {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.theme-clean .label::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+.theme-clean .label small::before, .theme-clean .label small::after { content: none; }
+.theme-clean .label small { font-size: 12px; letter-spacing: 0.12em; margin-left: 6px; opacity: 0.75; }
+.theme-clean .label small::before { content: "· "; }
+
+/* Numbers: bold, tight, tabular so they don't jiggle as they change. */
+.theme-clean .num { font-weight: 700; letter-spacing: -0.02em; }
+.theme-clean .rating-now { font-size: 60px; letter-spacing: -0.03em; }
+.theme-clean .delta { font-family: var(--sans); font-size: 22px; font-weight: 700; }
+.theme-clean .ends div { font-family: var(--sans); }
+.theme-clean .ends span { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.theme-clean .ends b { font-size: 20px; font-weight: 700; }
+.theme-clean .stat .num { font-size: 24px; }
+.theme-clean .stat .sub, .theme-clean .q .sub { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.theme-clean .stat .icon { display: none; } /* numbers speak for themselves */
+.theme-clean .stat { padding: 0 14px; }
+
+/* Player tag: the pawn in the accent colour. */
+.theme-clean .player { border-radius: 12px; }
+.theme-clean .player .pawn { color: var(--accent); font-size: 26px; }
+.theme-clean .player .name { font-family: var(--sans); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.theme-clean .player .rating { font-family: var(--sans); font-size: 18px; }
+
+/* Openings: the dot and bar carry the colour. */
+.theme-clean .opening .name, .theme-clean .opening .count, .theme-clean .opening .pct { font-family: var(--sans); font-size: 16px; }
+.theme-clean .opening .name { font-weight: 600; }
+.theme-clean .openings-head i { font-family: var(--sans); font-style: normal; font-size: 13px; }
+.theme-clean .bar { height: 8px; border-radius: 4px; }
+.theme-clean .dot { width: 10px; height: 10px; }
+
+/* Move quality and review. */
+.theme-clean .q .num { font-size: 28px; }
+.theme-clean .badge { width: 26px; height: 26px; font-size: 12px; box-shadow: none; }
+.theme-clean .acc-mid { color: var(--accent); }
+
+/* Last game and the vertical card. */
+.theme-clean .lastgame .vs b, .theme-clean .card .vsline { font-family: var(--sans); font-weight: 700; }
+.theme-clean .accs, .theme-clean .card .foot { font-family: var(--sans); font-size: 16px; }
+.theme-clean .card .big { font-family: var(--sans); font-weight: 800; letter-spacing: -0.03em; font-size: 56px; }
+.theme-clean .card .label { font-size: 13px; }
+.theme-clean .card.moment { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 28px rgba(0, 0, 0, 0.3); }
+.theme-clean .ticker { font-family: var(--sans); font-size: 30px; font-weight: 700; border-radius: 12px; letter-spacing: -0.01em; }
+.theme-clean .ticker .pawn { color: var(--accent); }
+.theme-clean .ticker .sep { color: var(--muted); }
