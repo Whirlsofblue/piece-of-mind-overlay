@@ -1,0 +1,130 @@
+/* Café: cozy lo-fi. Parchment panels with graph-paper lines in warm window light, soft leaf
+   shadows swaying across them, copper frames with riveted corner brackets, ivy with little white
+   flowers, and a steaming cup with a knight on it. A light theme: dark brown "ink" text. */
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Lora:wght@600;700&family=Nunito:wght@600;700&display=swap");
+
+body.theme-cafe {
+  --theme-script: 1; /* theme.js draws the frames, ivy and the cup */
+  --panel: transparent;
+  --line: rgba(120, 80, 40, 0.25);
+  --ink: #3a2a1e;
+  --muted: rgba(74, 52, 36, 0.72);
+  --gold: #b0703c;
+  --copper: #b0703c;
+  --win: #3f8a4e;
+  --draw: #a07a3c;
+  --loss: #b8473c;
+  --serif: "Lora", Georgia, serif;
+  --sans: "Nunito", system-ui, sans-serif;
+  --chart-1: #d4a06a; --chart-2: #a8652e; --chart-3: #6e3f1c; --chart-now: #6e3f1c; --chart-low: #b8473c;
+  --chart-fill-up: #d9a46a; --chart-fill-down: #d9a46a; --chart-fill-opacity: 0.38;
+  --eval-good: rgba(63, 138, 78, 0.22); --eval-bad: rgba(184, 71, 60, 0.22); --eval-line: #4a3324;
+  font-variant-numeric: lining-nums;
+}
+
+/* Panels: parchment on ::before, frame SVG (theme.js) over it, leaf shadows on ::after. */
+.theme-cafe .panel {
+  --cut: 14px;
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  color: var(--ink);
+}
+.theme-cafe .panel::before, .theme-cafe .panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+}
+.theme-cafe .panel::before {
+  z-index: -2;
+  background:
+    radial-gradient(90% 120% at 0% 0%, rgba(255, 210, 130, 0.45), transparent 60%),
+    linear-gradient(rgba(120, 80, 40, 0.08) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(120, 80, 40, 0.08) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(170deg, rgba(250, 238, 214, 0.94), rgba(238, 220, 190, 0.9));
+}
+/* Soft leaf shadows from a window, swaying slowly. */
+.theme-cafe .panel::after {
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.09;
+  mix-blend-mode: multiply;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='260' viewBox='0 0 420 260'%3E%3Cfilter id='b'%3E%3CfeGaussianBlur stdDeviation='6'/%3E%3C/filter%3E%3Cg filter='url(%23b)' fill='%233a2414'%3E%3Cpath d='M-10 40 Q120 70 260 150 T430 230' stroke='%233a2414' stroke-width='6' fill='none'/%3E%3Cellipse cx='60' cy='30' rx='26' ry='11' transform='rotate(-25 60 30)'/%3E%3Cellipse cx='95' cy='78' rx='28' ry='12' transform='rotate(35 95 78)'/%3E%3Cellipse cx='150' cy='70' rx='26' ry='11' transform='rotate(-20 150 70)'/%3E%3Cellipse cx='190' cy='128' rx='30' ry='12' transform='rotate(40 190 128)'/%3E%3Cellipse cx='250' cy='118' rx='26' ry='11' transform='rotate(-15 250 118)'/%3E%3Cellipse cx='300' cy='182' rx='30' ry='12' transform='rotate(35 300 182)'/%3E%3Cellipse cx='355' cy='170' rx='26' ry='11' transform='rotate(-25 355 170)'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 420px 260px no-repeat;
+  animation: cafeSway 9s ease-in-out infinite alternate;
+}
+@keyframes cafeSway { from { background-position: -10px -6px; } to { background-position: 14px 6px; } }
+.cafe-frame { position: absolute; inset: 0; z-index: -1; overflow: visible; pointer-events: none; }
+
+/* Type: handwritten labels, bookish numbers, friendly small print. */
+.theme-cafe .label {
+  font-family: "Caveat", cursive;
+  font-weight: 700;
+  font-size: 25px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #6b3f1e;
+  line-height: 1;
+}
+.theme-cafe .label small::before, .theme-cafe .label small::after { content: none; }
+.theme-cafe .label small { font-family: "Caveat", cursive; font-size: 20px; letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+.theme-cafe .label small::before { content: "· "; }
+.theme-cafe .num { font-weight: 700; color: #3a2a1e; }
+.theme-cafe .rating-now { font-size: 64px; }
+.theme-cafe .stat .sub, .theme-cafe .q .sub, .theme-cafe .ends span, .theme-cafe .accs span, .theme-cafe .card .sub, .theme-cafe .hint, .theme-cafe .review-head i, .theme-cafe .vs span { color: var(--muted); }
+.theme-cafe .player { --cut: 10px; }
+.theme-cafe .player .name { font-family: var(--serif); font-size: 26px; font-weight: 700; }
+.theme-cafe .player .rating { color: var(--muted); }
+.theme-cafe .opening .name { font-weight: 700; font-size: 21px; }
+.theme-cafe .opening .pct, .theme-cafe .openings-head i { color: var(--muted); }
+.theme-cafe .openings-head i { font-family: "Caveat", cursive; font-size: 20px; font-style: normal; }
+
+/* The cup replaces the pawn icon in the player tag and the ticker. */
+.theme-cafe .pawn {
+  display: inline-block;
+  width: 40px;
+  height: 30px;
+  font-size: 0;
+  vertical-align: middle;
+  background: url("cup.webp") center / contain no-repeat;
+}
+
+/* Dividers: copper lines with a stud at each end. */
+.theme-cafe .stat, .theme-cafe .q { position: relative; border-left: 1px solid rgba(150, 90, 45, 0.55); }
+.theme-cafe .stat:first-child, .theme-cafe .q:first-child { border-left: 0; }
+.theme-cafe .stat:not(:first-child)::before, .theme-cafe .stat:not(:first-child)::after,
+.theme-cafe .q:not(:first-child)::before, .theme-cafe .q:not(:first-child)::after {
+  content: ""; position: absolute; left: -4px; width: 7px; height: 7px; transform: rotate(45deg);
+  background: linear-gradient(135deg, #e8b583, #8a4f24);
+}
+.theme-cafe .stat::before, .theme-cafe .q::before { top: -6px; }
+.theme-cafe .stat::after, .theme-cafe .q::after { bottom: -6px; }
+.theme-cafe .openings-head { border-bottom-color: rgba(150, 90, 45, 0.35); }
+.theme-cafe .opening { border-bottom: 1px dashed rgba(150, 90, 45, 0.2); }
+.theme-cafe .bar { background: rgba(150, 90, 45, 0.14); border-radius: 5px; }
+.theme-cafe .result.W { background: rgba(63, 138, 78, 0.14); } .theme-cafe .result.L { background: rgba(184, 71, 60, 0.14); }
+.theme-cafe .rating-card { overflow: visible; }
+.theme-cafe .card.moment::before { background: radial-gradient(90% 120% at 0% 0%, rgba(255, 200, 110, 0.6), transparent 60%), linear-gradient(170deg, rgba(252, 236, 200, 0.96), rgba(240, 214, 170, 0.92)); }
+
+/* The cup on the rating panel, inside a copper ring wound with ivy, steam rising. */
+body.theme-cafe:not(.vertical) #root { padding-top: 130px; }
+.cafe-emblem { position: absolute; width: 240px; height: 240px; pointer-events: none; z-index: 5; }
+.cafe-emblem svg { position: absolute; inset: 0; overflow: visible; }
+.cafe-emblem img { position: absolute; left: 34px; bottom: 26px; width: 172px; filter: drop-shadow(0 6px 6px rgba(60, 30, 10, 0.35)); }
+.cafe-emblem .steam path { fill: none; stroke: #fffaf0; stroke-linecap: round; filter: url(#cafe-steam-blur); opacity: 0; animation: cafeSteam 5.5s ease-in-out infinite; }
+.cafe-emblem .steam path:nth-child(2) { animation-delay: -1.8s; }
+.cafe-emblem .steam path:nth-child(3) { animation-delay: -3.6s; }
+@keyframes cafeSteam {
+  0% { opacity: 0; transform: translate(0, 12px) scaleY(0.85); }
+  25% { opacity: 0.42; }
+  70% { opacity: 0.25; }
+  100% { opacity: 0; transform: translate(6px, -26px) scaleY(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-cafe .panel::after, .cafe-emblem .steam path { animation: none; }
+  .cafe-emblem .steam path { opacity: 0.35; }
+}
