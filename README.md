@@ -48,8 +48,19 @@ Add these to the URL with `&`:
 | `reset` | Start a new session now. Otherwise a session ends after 6 hours without games. |
 | `since=2` | Count the last 2 hours as this session, if you added the overlay late. |
 | `layout=vertical` | Big, phone-readable panels: `ticker` (rating, score, streak) and `card`, which rotates between your rating, the last game and the session, and shows each finished game for 12 seconds. |
-| `font=outfit` | Display font: `classic` (the original serif), `fraunces`, `outfit`, `nunito`, `grotesk` or `bricolage`. |
+| `font=classic` | Display font. The default is `bricolage`; others are `classic` (the original serif), `fraunces`, `outfit`, `nunito` and `grotesk`. |
 | `demo` | Made-up numbers, for arranging your scene before you play. Add `moment` to see the post-game card. |
+
+## Session → Lichess study
+
+**https://whirlsofblue.github.io/piece-of-mind-overlay/study.html**
+
+Log in with Lichess, enter your chess.com username and how far back to look, and it builds a
+Lichess study of the session: every game analysed with Stockfish and annotated with ?! ? ??
+(Lichess's thresholds), the engine's better line as a variation, chess.com's clock times, and
+a note where each game left the moves 2000+ players usually choose (from the Lichess opening
+explorer). When it was you who left that path, a one-move quiz chapter is added at the end.
+The Lichess login stays in your browser and can be revoked at lichess.org/account/oauth/token.
 
 ## Notes
 

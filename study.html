@@ -1,0 +1,278 @@
+<!doctype html>
+<!--
+  Session → Lichess study. Fetches a chess.com session, analyses every game with Stockfish
+  (Lichess's formulas), annotates it, adds opening notes and quizzes from the Lichess opening
+  explorer, and imports it all into a new study on your Lichess account.
+
+  Lichess login uses OAuth with PKCE (no app registration; the token stays in this browser).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session to Lichess</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f6f3ec; --card: #fffdf8; --ink: #1f1d1a; --muted: #6d675e; --line: #e2dccf;
+    --accent: #6a8f4e; --accent-ink: #fff; --bad: #b4513d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #1d1b18; --card: #262420; --ink: #f1ece2; --muted: #a39b8e; --line: #3a3630; --accent: #86ad68; --accent-ink: #14120f; --bad: #e07a63; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 Inter, system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font: 700 30px/1.15 Outfit, system-ui, sans-serif; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  h2 { font: 600 17px Outfit, system-ui, sans-serif; margin: 0 0 12px; }
+  label { display: block; margin-bottom: 12px; }
+  label > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; }
+  .check input { margin-top: 4px; accent-color: var(--accent); }
+  .check small { display: block; color: var(--muted); }
+  button { padding: 10px 16px; border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font: 600 15px Inter, system-ui, sans-serif; cursor: pointer; }
+  button.secondary { background: none; border: 1px solid var(--line); color: var(--ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .who { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .games { list-style: none; margin: 8px 0 0; padding: 0; font-size: 14px; }
+  .games li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .games li span:last-child { color: var(--muted); white-space: nowrap; }
+  .W { color: var(--accent); } .L { color: var(--bad); } .D { color: var(--muted); }
+  progress { width: 100%; height: 8px; accent-color: var(--accent); }
+  #log { font-size: 14px; color: var(--muted); margin-top: 10px; }
+  #log .err { color: var(--bad); }
+  .done { font-size: 16px; }
+  .done a { color: var(--accent); font-weight: 600; }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Session → Lichess study</h1>
+  <p class="lede">Your chess.com games, analysed with Stockfish and annotated the Lichess way, with notes on where each opening left theory and a quick quiz for the moves worth knowing.</p>
+
+  <section>
+    <h2>1. Lichess</h2>
+    <div class="who">
+      <span id="who">Not logged in.</span>
+      <button id="login">Log in with Lichess</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Games</h2>
+    <div class="row">
+      <label><span>chess.com username</span><input type="text" id="user" autocomplete="off" spellcheck="false"></label>
+      <label><span>Games from the last</span>
+        <select id="hours"><option value="3">3 hours</option><option value="6" selected>6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option><option value="72">3 days</option></select></label>
+    </div>
+    <div class="row">
+      <label><span>Time control</span>
+        <select id="tc"><option value="">All</option><option value="bullet">Bullet</option><option value="blitz">Blitz</option><option value="rapid">Rapid</option></select></label>
+      <label><span>Study visibility</span>
+        <select id="visibility"><option value="unlisted" selected>Unlisted (anyone with the link)</option><option value="private">Private</option><option value="public">Public</option></select></label>
+    </div>
+    <label class="check"><input type="checkbox" id="openings" checked><span>Opening notes and quizzes<small>Where each game left the moves strong players usually choose, plus a one-move quiz chapter whenever it was you.</small></span></label>
+    <button class="secondary" id="find">Find games</button>
+    <ul class="games" id="games"></ul>
+  </section>
+
+  <section>
+    <h2>3. Create</h2>
+    <button id="create" disabled>Analyse and create study</button>
+    <progress id="progress" value="0" max="1" hidden></progress>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script type="module">
+import { Engine, analyseGame } from "./review.js";
+import { annotatedPgn, openingReport, openingQuiz } from "./annotate.js";
+
+const $ = (id) => document.getElementById(id);
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+  del: (k) => { try { localStorage.removeItem(k); } catch {} },
+};
+const LICHESS = "https://lichess.org";
+const CLIENT_ID = "piece-of-mind-overlay";
+const REDIRECT = location.origin + location.pathname;
+
+// ---- Lichess login (OAuth with PKCE) ----
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const randomString = () => b64url(crypto.getRandomValues(new Uint8Array(32)));
+
+async function login() {
+  const verifier = randomString(), state = randomString();
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  sessionStorage.setItem("pom-pkce", JSON.stringify({ verifier, state }));
+  const q = new URLSearchParams({ response_type: "code", client_id: CLIENT_ID, redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge, scope: "study:write", state });
+  location.href = `${LICHESS}/oauth?${q}`;
+}
+
+async function finishLogin() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("code") && !q.has("error")) return;
+  history.replaceState(null, "", REDIRECT);
+  const saved = JSON.parse(sessionStorage.getItem("pom-pkce") || "null");
+  sessionStorage.removeItem("pom-pkce");
+  if (q.has("error") || !saved || saved.state !== q.get("state")) { log("Lichess login was cancelled.", true); return; }
+  const r = await fetch(`${LICHESS}/api/token`, {
+    method: "POST",
+    body: new URLSearchParams({ grant_type: "authorization_code", code: q.get("code"), code_verifier: saved.verifier, redirect_uri: REDIRECT, client_id: CLIENT_ID }),
+  });
+  const data = await r.json();
+  if (data.access_token) store.set("pom-lichess-token", data.access_token);
+  else log("Lichess login failed.", true);
+}
+
+let token = null, lichessUser = null;
+async function showAccount() {
+  token = store.get("pom-lichess-token");
+  if (token) {
+    const r = await fetch(`${LICHESS}/api/account`, { headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) lichessUser = (await r.json()).username;
+    else { store.del("pom-lichess-token"); token = null; }
+  }
+  $("who").textContent = lichessUser ? `Logged in as ${lichessUser}.` : "Not logged in.";
+  $("login").textContent = lichessUser ? "Log out" : "Log in with Lichess";
+  updateCreate();
+}
+$("login").onclick = () => {
+  if (!lichessUser) return login();
+  fetch(`${LICHESS}/api/token`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  store.del("pom-lichess-token");
+  lichessUser = null;
+  showAccount();
+};
+
+// ---- chess.com games ----
+const API = "https://api.chess.com/pub/player/";
+let games = [], user = "";
+const sideOf = (g) => (g.white.username.toLowerCase() === user ? "w" : "b");
+const DRAWS = new Set(["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"]);
+const outcome = (g) => { const r = g[sideOf(g) === "w" ? "white" : "black"].result; return r === "win" ? "W" : DRAWS.has(r) ? "D" : "L"; };
+
+async function monthGames(d) {
+  const r = await fetch(`${API}${user}/games/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  return r.ok ? (await r.json()).games || [] : [];
+}
+
+async function findGames() {
+  user = $("user").value.trim().toLowerCase();
+  if (!user) return;
+  store.set("pom-study-user", user);
+  const since = Date.now() / 1000 - Number($("hours").value) * 3600;
+  const now = new Date(), start = new Date(since * 1000);
+  let list = await monthGames(now);
+  if (start.getUTCMonth() !== now.getUTCMonth()) list = [...(await monthGames(start)), ...list];
+  const tc = $("tc").value;
+  games = list.filter((g) => g.rules === "chess" && g.end_time >= since && (!tc || g.time_class === tc)).sort((a, b) => a.end_time - b.end_time).slice(-40);
+  $("games").replaceChildren(...games.map((g) => {
+    const me = sideOf(g), opp = g[me === "w" ? "black" : "white"];
+    const li = document.createElement("li");
+    li.innerHTML = `<span><b class="${outcome(g)}">${outcome(g)}</b> vs ${opp.username} (${opp.rating})</span><span>${g.time_class} · ${new Date(g.end_time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>`;
+    return li;
+  }));
+  if (!games.length) log(`No ${tc || ""} games in that time.`.replace("  ", " "));
+  else log(`${games.length} game${games.length === 1 ? "" : "s"} found.`);
+  updateCreate();
+}
+$("find").onclick = findGames;
+
+function updateCreate() { $("create").disabled = !(token && games.length); }
+
+function log(text, error = false) {
+  const p = document.createElement("div");
+  if (error) p.className = "err";
+  p.textContent = text;
+  $("log").append(p);
+}
+
+// ---- Creating the study ----
+async function lichess(path, body, method = "POST") {
+  const r = await fetch(`${LICHESS}${path}`, { method, headers: { Authorization: `Bearer ${token}` }, body: body && new URLSearchParams(body) });
+  if (!r.ok) throw new Error(`Lichess said ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return r.headers.get("content-type")?.includes("json") ? r.json() : r.text();
+}
+
+$("create").onclick = async () => {
+  $("create").disabled = true;
+  $("log").replaceChildren();
+  const bar = $("progress");
+  bar.hidden = false;
+  const engine = new Engine(Number(new URLSearchParams(location.search).get("depth")) || 18);
+  const withOpenings = $("openings").checked;
+  const chapters = [], quizzes = [];
+  const totals = { W: 0, D: 0, L: 0, acc: [] };
+  try {
+    await engine.start();
+    for (const [n, g] of games.entries()) {
+      const me = sideOf(g), opp = g[me === "w" ? "black" : "white"].username;
+      log(`Analysing game ${n + 1} of ${games.length} (vs ${opp})…`);
+      const r = await analyseGame(engine, g.pgn, (p) => { bar.value = (n + p) / games.length; });
+      let opening = null;
+      if (withOpenings) {
+        try { opening = await openingReport(token, r.uci, r.moves, g.time_class); }
+        catch (e) { log(`Opening notes skipped for this game (${e.message}).`, true); }
+      }
+      const res = outcome(g);
+      totals[res]++;
+      totals.acc.push(r.accuracy[me]);
+      const name = `${{ W: "Won", L: "Lost", D: "Drew" }[res]} vs ${opp}${opening?.name ? ` · ${opening.name.split(":")[0]}` : ""}`.slice(0, 100);
+      chapters.push({ name, pgn: annotatedPgn(g, r, opening, me), orientation: me === "w" ? "white" : "black" });
+      const quiz = openingQuiz(g, r, opening, me);
+      if (quiz) quizzes.push({ name: `Quiz: ${opening.name ? opening.name.split(":")[0] : "opening"} (move ${Math.floor(opening.deviation.ply / 2) + 1})`.slice(0, 100), pgn: quiz, orientation: me === "w" ? "white" : "black", mode: "gamebook" });
+    }
+    engine.stop();
+    bar.value = 1;
+
+    const day = new Date(games.at(-1).end_time * 1000).toLocaleDateString("en", { month: "short", day: "numeric" });
+    log("Creating the study on Lichess…");
+    const study = await lichess("/api/study", {
+      name: `${user} · session ${day}`.slice(0, 100), visibility: $("visibility").value,
+      computer: "everyone", explorer: "everyone", cloneable: "everyone", shareable: "everyone", chat: "member", sticky: "false",
+    });
+    const avg = totals.acc.reduce((a, b) => a + b, 0) / totals.acc.length;
+    const summary = `[Event "Session summary"]\n[Result "*"]\n\n{ ${games.length} games: ${totals.W} won, ${totals.D} drawn, ${totals.L} lost. Average accuracy ${avg.toFixed(1)}%. ` +
+      `Each game is annotated with ?! ? ?? where the engine disagreed, with its better line as a variation.` +
+      (quizzes.length ? ` The quiz chapters at the end are positions from your openings: find the move strong players choose.` : "") + ` } *\n`;
+    const all = [{ name: "Session summary", pgn: summary }, ...chapters, ...quizzes].slice(0, 63);
+    for (const [i, c] of all.entries()) {
+      log(`Adding chapter ${i + 1} of ${all.length}: ${c.name}`);
+      await lichess(`/api/study/${study.id}/import-pgn`, { pgn: c.pgn, name: c.name, ...(c.orientation && { orientation: c.orientation }), ...(c.mode && { mode: c.mode }) });
+    }
+    // Remove the empty first chapter Lichess creates with every new study.
+    try {
+      const pgn = await lichess(`/api/study/${study.id}.pgn`, null, "GET");
+      const first = (pgn.match(/\[ChapterURL "[^"]*\/([A-Za-z0-9]{8})"\]/) || [])[1];
+      if (first) await lichess(`/api/study/${study.id}/${first}`, null, "DELETE");
+    } catch {}
+    const url = `${LICHESS}/study/${study.id}`;
+    const done = document.createElement("div");
+    done.className = "done";
+    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${chapters.length} games, ${quizzes.length} quiz${quizzes.length === 1 ? "" : "zes"}).`;
+    $("log").append(done);
+  } catch (e) {
+    console.error(e);
+    log(e.message, true);
+  } finally {
+    engine.stop();
+    updateCreate();
+  }
+};
+
+// ---- Start ----
+$("user").value = new URLSearchParams(location.search).get("user") || store.get("pom-study-user") || "";
+await finishLogin();
+await showAccount();
+if ($("user").value) findGames();
+</script>
+</body>
+</html>

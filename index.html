@@ -23,7 +23,7 @@
     tc=auto          time class: auto (follows your latest game), bullet, blitz, rapid or daily
     reset            start a new session now (otherwise a new one starts after 6 hours without games)
     since=3          count the last 3 hours as this session (e.g. after starting the overlay late)
-    font=classic     display font: classic (Cormorant Garamond), fraunces, outfit, nunito, grotesk or bricolage
+    font=bricolage   display font: bricolage (default), classic (Cormorant Garamond), fraunces, outfit, nunito or grotesk
     demo             made-up numbers, for placing the overlay before you play
     bg               dark background, for previewing in a normal browser
 -->
@@ -183,7 +183,7 @@ const DEMO = params.has("demo");
 const SESSION_GAP = 6 * 3600; // seconds without a game before a new session starts
 if (params.has("bg")) document.body.classList.add("bg");
 
-// Display fonts. "classic" is the original; the others are less formal.
+// Display fonts. Bricolage Grotesque is the default; "classic" is the original serif.
 const FONTS = {
   classic: null,
   fraunces: ["Fraunces:opsz,wght@9..144,500;9..144,600", '"Fraunces", Georgia, serif'],
@@ -192,7 +192,7 @@ const FONTS = {
   grotesk: ["Space+Grotesk:wght@500;600", '"Space Grotesk", system-ui, sans-serif'],
   bricolage: ["Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600", '"Bricolage Grotesque", system-ui, sans-serif'],
 };
-const FONT = FONTS[params.get("font")];
+const FONT = FONTS[params.get("font") || "bricolage"];
 if (FONT) {
   document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: `https://fonts.googleapis.com/css2?family=${FONT[0]}&display=swap` }));
   document.documentElement.style.setProperty("--serif", FONT[1]);

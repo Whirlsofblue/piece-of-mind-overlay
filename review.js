@@ -109,22 +109,24 @@ export class Engine {
   }
 
   // Evaluation of a position (after the given UCI moves), from White's point of view,
-  // and the engine's best move there.
+  // the engine's best move there, and its main line (UCI moves).
   async evaluate(moves, whiteToMove) {
-    let score = { cp: 0 }, best = null;
+    let score = { cp: 0 }, best = null, pv = [];
     await new Promise((resolve) => {
       this.listener = (line) => {
         const m = line.match(/^info .*\bscore (cp|mate) (-?\d+)/);
         if (m && !/\b(lowerbound|upperbound)\b/.test(line)) {
           const v = Number(m[2]) * (whiteToMove ? 1 : -1); // UCI scores are from the side to move
           score = m[1] === "cp" ? { cp: v } : { mate: v };
+          const pvMatch = line.match(/\bpv (.+)$/);
+          if (pvMatch) pv = pvMatch[1].trim().split(/\s+/);
         }
         if (line.startsWith("bestmove")) { best = line.split(" ")[1]; this.listener = null; resolve(); }
       };
       this.worker.postMessage(`position startpos${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
       this.worker.postMessage(`go depth ${this.depth}`);
     });
-    return { score, best };
+    return { score, best, pv };
   }
 
   stop() { this.worker?.terminate(); this.worker = null; }
@@ -141,20 +143,25 @@ export async function analyseGame(engine, pgn, onProgress = () => {}) {
   const replay = new Chess();
   const uci = [];
   const scores = [];
-  const bests = [(await engine.evaluate([], true)).best]; // best move in each position before a move
+  const first = await engine.evaluate([], true);
+  const bests = [first.best]; // best move in each position before a move
+  const pvs = [first.pv]; // and the engine's line from there
   for (const [i, move] of history.entries()) {
     replay.move(move.san);
     uci.push(move.from + move.to + (move.promotion || ""));
     if (replay.isCheckmate()) {
       scores.push({ mate: 0, winner: move.color });
       bests.push(null);
+      pvs.push([]);
     } else if (replay.isStalemate() || replay.isInsufficientMaterial()) {
       scores.push({ cp: 0 });
       bests.push(null);
+      pvs.push([]);
     } else {
-      const { score, best } = await engine.evaluate(uci, replay.turn() === "w");
+      const { score, best, pv } = await engine.evaluate(uci, replay.turn() === "w");
       scores.push(score);
       bests.push(best);
+      pvs.push(pv);
     }
     onProgress((i + 1) / history.length);
   }
@@ -172,6 +179,11 @@ export async function analyseGame(engine, pgn, onProgress = () => {}) {
     counts,
     judgements,
     moves: history.map((m) => m.san),
+    uci, // the moves played
+    scores, // White-POV score after each move
+    bests, // engine's best move before each move (index i = before move i)
+    pvs, // engine's line before each move
+    headers: game.getHeaders(),
     winPercents: [50 + 50 * winningChances(INITIAL_CP), ...scores.map(winPercent)],
   };
 }
