@@ -48,6 +48,11 @@
   #log .err { color: var(--bad); }
   .done { font-size: 16px; }
   .done a { color: var(--accent); font-weight: 600; }
+  .note { color: var(--muted); font-size: 14px; margin: -4px 0 12px; }
+  .leak { border-top: 1px solid var(--line); padding: 12px 0; font-size: 14px; }
+  .leak b { font-family: Outfit, system-ui, sans-serif; font-size: 16px; }
+  .leak p { margin: 4px 0 0; color: var(--muted); }
+  #leakStudy { margin-top: 12px; }
   @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -93,13 +98,29 @@
     <progress id="progress" value="0" max="1" hidden></progress>
     <div id="log"></div>
   </section>
+
+  <section>
+    <h2>Repertoire leaks</h2>
+    <p class="note">Opening positions you keep reaching and scoring badly in, from your games over a longer stretch. Uses the username and time control above.</p>
+    <div class="row">
+      <label><span>Look back over</span>
+        <select id="leakMonths"><option value="1">1 month</option><option value="3" selected>3 months</option><option value="6">6 months</option></select></label>
+      <label><span>Reached at least</span>
+        <select id="leakMin"><option value="3">3 times</option><option value="4" selected>4 times</option><option value="6">6 times</option></select></label>
+    </div>
+    <button class="secondary" id="findLeaks">Find my leaks</button>
+    <div id="leaks"></div>
+    <button id="leakStudy" hidden>Create a leak study</button>
+    <div id="leakLog"></div>
+  </section>
 </main>
 
 <script type="module">
 import { Engine, analyseGame } from "./review.js";
-import { annotatedPgn, openingReport, openingQuiz, fensBefore } from "./annotate.js";
+import { annotatedPgn, openingReport, openingQuiz, fensBefore, toSan } from "./annotate.js";
 import { criticalPlies, deepLines, isOnlyMove, momentNotes, puzzlePgn } from "./moments.js";
 import { planMap } from "./plans.js";
+import { findLeaks, examine, leakText, leakPgn, leakQuiz } from "./leaks.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -379,6 +400,108 @@ $("create").onclick = async () => {
   } finally {
     engine.stop();
     updateCreate();
+  }
+};
+
+// ---- Repertoire leaks ----
+let leakReport = null; // { overall, examined: [...], games, tc }
+
+async function lastMonths(n) {
+  const now = new Date();
+  const out = [];
+  for (let k = n - 1; k >= 0; k--) out.push(...(await monthGames(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 15)))));
+  return out;
+}
+
+function leakLog(text, error = false) {
+  const p = document.createElement("div");
+  if (error) p.className = "err";
+  p.textContent = text;
+  $("leakLog").append(p);
+}
+
+$("findLeaks").onclick = async () => {
+  user = $("user").value.trim().toLowerCase();
+  if (!user) { $("leakLog").textContent = "Enter your chess.com username above."; return; }
+  $("findLeaks").disabled = true;
+  $("leaks").replaceChildren();
+  $("leakLog").replaceChildren();
+  $("leakStudy").hidden = true;
+  const engine = new Engine(18);
+  try {
+    leakLog("Fetching your games…");
+    const tc = $("tc").value;
+    const games = (await lastMonths(Number($("leakMonths").value))).filter((g) => g.rules === "chess" && (!tc || g.time_class === tc));
+    leakLog(`Looking through ${games.length} games…`);
+    const { overall, leaks } = findLeaks(games, user, { minGames: Number($("leakMin").value) });
+    if (!leaks.length) { leakLog("No leaks found: nothing you reach that often scores clearly below your usual. Nice."); return; }
+    await engine.start();
+    const examined = [];
+    for (const [i, leak] of leaks.entries()) {
+      leakLog(`Looking closer at leak ${i + 1} of ${leaks.length}…`);
+      const x = await examine(leak, engine, token, tc || games[leak.games[0]].time_class);
+      x.label = x.db?.name || openingLine(x.moves);
+      x.urls = x.games.map((gi) => games[gi].url);
+      examined.push(x);
+      const card = document.createElement("div");
+      card.className = "leak";
+      card.innerHTML = "<b></b><p></p>";
+      card.querySelector("b").textContent = `Leak ${i + 1} · ${x.db?.name ? x.label : `after ${x.label}`}`;
+      card.querySelector("p").textContent = leakText(x, overall);
+      $("leaks").append(card);
+    }
+    leakReport = { overall, examined };
+    $("leakLog").replaceChildren();
+    if (!token) leakLog("Log in with Lichess (above) to see what 2000+ players play in these positions and to make a study of them.");
+    $("leakStudy").hidden = !token;
+  } catch (e) {
+    console.error(e);
+    leakLog(e.message, true);
+  } finally {
+    engine.stop();
+    $("findLeaks").disabled = false;
+  }
+};
+
+// "1.d4 Nf6 2.Nf3" for a leak without an opening name.
+function openingLine(moves) {
+  const sans = toSan("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves);
+  return sans.map((s, i) => (i % 2 === 0 ? `${i / 2 + 1}.${s}` : s)).join(" ") || "Starting position";
+}
+
+$("leakStudy").onclick = async () => {
+  if (!leakReport || !token) return;
+  $("leakStudy").disabled = true;
+  $("leakLog").replaceChildren();
+  try {
+    const { overall, examined } = leakReport;
+    const day = new Date().toLocaleDateString("en", { month: "short", day: "numeric" });
+    leakLog("Creating the study on Lichess…");
+    const study = await lichess("/api/study", {
+      name: `${user} · repertoire leaks ${day}`.slice(0, 100), visibility: "private",
+      computer: "everyone", explorer: "everyone", cloneable: "owner", shareable: "owner", chat: "nobody", sticky: "false",
+    });
+    const summary = `[Event "Repertoire leaks"]\n[Result "*"]\n\n{ ${examined.length} opening positions you reach often and score below your usual ${Math.round(overall * 100)}% in. ` +
+      `Each chapter shows the move to learn as the main line (green arrow) and the moves you've played as variations, with your score and the engine's view. } *\n`;
+    const chapters = [{ name: "Summary", pgn: summary }, ...examined.map((x, i) => ({
+      name: `Leak ${i + 1}: ${x.label}`.slice(0, 100), pgn: leakPgn(x, overall, x.label, x.urls), orientation: x.colour === "w" ? "white" : "black",
+    }))];
+    for (const c of chapters) {
+      leakLog(`Adding ${c.name}`);
+      await lichess(`/api/study/${study.id}/import-pgn`, { pgn: c.pgn, name: c.name, ...(c.orientation && { orientation: c.orientation }) });
+    }
+    await removeEmptyFirstChapter(study.id);
+    const quizzes = examined.map((x, i) => ({ name: `Quiz: ${x.label}`.slice(0, 100), pgn: leakQuiz(x, x.label), orientation: x.colour === "w" ? "white" : "black" }));
+    const note = await collect("openings", "My openings", quizzes);
+    const done = document.createElement("div");
+    done.className = "done";
+    done.innerHTML = `Done: <a href="${LICHESS}/study/${study.id}" target="_blank" rel="noopener">open your leak study</a>.${note}`;
+    $("leakLog").append(done);
+  } catch (e) {
+    console.error(e);
+    leakLog(e.message, true);
+  } finally {
+    $("leakStudy").disabled = false;
   }
 };
 

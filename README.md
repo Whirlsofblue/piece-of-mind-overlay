@@ -74,6 +74,13 @@ Uses the Lichess masters database (top games of the position and its two main mo
 style) and you missed it, a one-move interactive chapter; they also collect in "My puzzles".
 The Lichess login stays in your browser and can be revoked at lichess.org/account/oauth/token.
 
+**Repertoire leaks** (same page): looks through 1–6 months of your games for opening positions
+you reach often (3+ times) and score clearly below your usual in, ranked by points lost. For
+each: what you've played there and how each scored, what 2000+ players play (with a Lichess
+login) and the engine's view, and the move to learn. Shown on the page; with a login, also a
+private study (the move to learn as the main line, your moves as variations) and quizzes in
+My openings.
+
 ## Notes
 
 - Session stats come from chess.com's public game data and update within about 20 seconds of a game ending.
