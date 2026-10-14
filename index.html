@@ -202,7 +202,9 @@ const FONTS = {
 const THEME = /^[a-z0-9-]+$/.test(params.get("theme") || "") ? params.get("theme") : "classic";
 let theme = {};
 if (THEME !== "classic") {
-  document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${THEME}/theme.css` }));
+  // Wait for the theme's styles before the first render: its frames are measured from the layout.
+  const sheet = Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${THEME}/theme.css` });
+  await new Promise((done) => { sheet.onload = sheet.onerror = done; document.head.append(sheet); });
   document.body.classList.add(`theme-${THEME}`);
   theme = await import(`./themes/${THEME}/theme.js`).catch(() => ({}));
 }
@@ -721,6 +723,9 @@ function onPom(e) {
 window.addEventListener("pom", (event) => {
   try { onPom(typeof event.detail === "string" ? JSON.parse(event.detail) : event.detail || {}); } catch (err) { console.error(err); }
 });
+
+// Web fonts arriving change the layout; redraw so theme frames fit the final sizes.
+document.fonts?.addEventListener("loadingdone", () => lastSummary && render(lastSummary));
 
 if (SHOW.includes("card")) {
   setInterval(() => {

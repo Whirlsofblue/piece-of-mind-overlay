@@ -1,0 +1,127 @@
+/* Grove: stone-and-vine frames on translucent forest-green panels, sun rays, and the stone
+   knight with ivy. Frames, vines, leaves and the knight's ring are drawn by theme.js. */
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap");
+
+body.theme-grove {
+  --panel: transparent;
+  --line: rgba(231, 194, 106, 0.28);
+  --ink: #f4f1e3;
+  --muted: rgba(226, 232, 206, 0.74);
+  --gold: #e7c26a;
+  --leaf: #b8dc6a;
+  --win: #a6e07e;
+  --draw: #ead08c;
+  --loss: #ec8b6c;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --sans: "Cinzel", Georgia, serif;
+  --chart-1: #86dcb0; --chart-2: #c4e46a; --chart-3: #f2e27a; --chart-now: #fbf3c0; --chart-low: #ec8b6c;
+  --chart-fill-up: #b8e070; --chart-fill-down: #b8e070; --chart-fill-opacity: 0.32;
+  --eval-good: rgba(166, 224, 126, 0.3); --eval-bad: rgba(236, 139, 108, 0.3); --eval-line: #f4f1e3;
+  font-variant-numeric: lining-nums;
+}
+
+/* Panels: fill on ::before (clipped to the chamfered shape), frame SVG from theme.js on top. */
+.theme-grove .panel {
+  --cut: 18px;
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+}
+.theme-grove .panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  background:
+    linear-gradient(115deg, transparent 0 28%, rgba(255, 238, 160, 0.07) 33%, transparent 39%, transparent 55%, rgba(255, 238, 160, 0.05) 60%, transparent 66%) 0 0 / 220% 100%,
+    linear-gradient(rgba(231, 194, 106, 0.05) 1px, transparent 1px) 0 0 / 30px 30px,
+    linear-gradient(90deg, rgba(231, 194, 106, 0.05) 1px, transparent 1px) 0 0 / 30px 30px,
+    linear-gradient(165deg, rgba(26, 52, 30, 0.66), rgba(8, 22, 12, 0.6));
+  animation: groveRays 24s ease-in-out infinite alternate;
+}
+@keyframes groveRays { from { background-position: 0 0, 0 0, 0 0, 0 0; } to { background-position: 100% 0, 0 0, 0 0, 0 0; } }
+.grove-frame { position: absolute; inset: 0; z-index: -1; overflow: visible; pointer-events: none; }
+
+/* Type: carved-looking labels, elegant numbers. */
+.theme-grove .label {
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+  color: #ead9a4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 10px rgba(231, 194, 106, 0.25);
+}
+.theme-grove .label small::before, .theme-grove .label small::after { content: none; }
+.theme-grove .label small { font-size: 12px; letter-spacing: 0.14em; color: var(--muted); border-left: 1px solid rgba(231, 194, 106, 0.45); padding-left: 10px; margin-left: 10px; }
+.theme-grove .num { font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); }
+.theme-grove .delta { font-family: var(--serif); font-weight: 700; }
+.theme-grove .stat .sub, .theme-grove .q .sub, .theme-grove .ends span, .theme-grove .accs span, .theme-grove .card .sub {
+  font-family: "Cinzel", Georgia, serif; letter-spacing: 0.08em; font-size: 12px;
+}
+.theme-grove .player { --cut: 14px; }
+.theme-grove .player .name { font-family: "Cinzel", Georgia, serif; font-size: 26px; font-weight: 700; letter-spacing: 0.04em; }
+.theme-grove .opening .name { font-family: var(--serif); font-weight: 700; font-size: 22px; }
+.theme-grove .openings-head i { font-family: var(--serif); }
+
+/* The stone knight replaces the pawn icon in the player tag and the ticker. */
+.theme-grove .pawn {
+  display: inline-block;
+  width: 28px;
+  height: 40px;
+  font-size: 0;
+  vertical-align: middle;
+  background: url("knight.webp") center / contain no-repeat;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+
+/* Dividers: thin gold lines with a diamond at each end. */
+.theme-grove .stat, .theme-grove .q { position: relative; border-left: 1px solid rgba(231, 194, 106, 0.55); }
+.theme-grove .stat:first-child, .theme-grove .q:first-child { border-left: 0; }
+.theme-grove .stat:not(:first-child)::before, .theme-grove .stat:not(:first-child)::after,
+.theme-grove .q:not(:first-child)::before, .theme-grove .q:not(:first-child)::after {
+  content: ""; position: absolute; left: -4px; width: 7px; height: 7px; background: var(--gold); transform: rotate(45deg);
+}
+.theme-grove .stat::before, .theme-grove .q::before { top: -6px; }
+.theme-grove .stat::after, .theme-grove .q::after { bottom: -6px; }
+.theme-grove .openings-head { border-bottom-color: rgba(231, 194, 106, 0.35); }
+.theme-grove .opening { border-bottom-color: rgba(231, 194, 106, 0.12); }
+.theme-grove .bar { background: rgba(231, 194, 106, 0.12); border-radius: 5px; }
+
+/* Charts on a faint grid. */
+.theme-grove .chart, .theme-grove .evalchart {
+  background:
+    linear-gradient(rgba(231, 194, 106, 0.08) 1px, transparent 1px) 0 0 / 100% 25%,
+    linear-gradient(90deg, rgba(231, 194, 106, 0.08) 1px, transparent 1px) 0 0 / 10% 100%;
+  filter: drop-shadow(0 0 6px rgba(196, 228, 106, 0.4));
+}
+.theme-grove .rating-card { overflow: visible; }
+.theme-grove .card.moment::before { background: linear-gradient(165deg, rgba(70, 58, 20, 0.7), rgba(12, 22, 12, 0.64)); }
+
+/* The stone knight standing on the rating panel, in a gold ring, with a few leaves drifting down. */
+.grove-emblem { position: absolute; width: 230px; height: 260px; pointer-events: none; z-index: 5; }
+.grove-emblem svg { position: absolute; inset: 0; overflow: visible; }
+.grove-emblem .orb { transform-origin: 115px 120px; animation: groveOrb 50s linear infinite; }
+@keyframes groveOrb { to { transform: rotate(360deg); } }
+.grove-emblem img { position: absolute; right: 26px; bottom: 0; height: 205px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5)); }
+.grove-emblem .fall { position: absolute; top: 20px; opacity: 0; animation: groveFall 16s linear infinite; }
+.grove-emblem .fall:nth-of-type(2) { left: 40px; animation-delay: -5s; animation-duration: 19s; }
+.grove-emblem .fall:nth-of-type(3) { left: 150px; animation-delay: -11s; animation-duration: 22s; }
+@keyframes groveFall {
+  0% { transform: translate(0, 0) rotate(0); opacity: 0; }
+  10% { opacity: 0.85; }
+  50% { transform: translate(-30px, 140px) rotate(160deg); }
+  85% { opacity: 0.7; }
+  100% { transform: translate(10px, 300px) rotate(320deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-grove .panel::before, .grove-emblem .orb, .grove-emblem .fall { animation: none; }
+  .grove-emblem .fall { display: none; }
+}
+
+/* Room above the panels for the knight to stand on the rating panel (desktop layout). */
+body.theme-grove:not(.vertical) #root { padding-top: 150px; }

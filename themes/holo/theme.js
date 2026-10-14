@@ -62,8 +62,8 @@ function placeEmblem(root, vertical) {
   }
   const r = anchor.getBoundingClientRect();
   // Over the top-right corner of the rating panel, standing above it like in the mockup.
-  emblem.style.left = `${r.right - 215}px`;
-  emblem.style.top = `${r.top - 118}px`;
+  emblem.style.left = `${r.right + scrollX - 215}px`;
+  emblem.style.top = `${r.top + scrollY - 118}px`;
 }
 
 export function decorate(root, { vertical }) {
