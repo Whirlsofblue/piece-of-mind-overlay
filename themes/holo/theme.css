@@ -1,0 +1,122 @@
+/* Holo: translucent HUD panels with chamfered, glowing frames and a hologram knight.
+   The frames, corner accents and the knight's rings are drawn by theme.js. */
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap");
+
+body.theme-holo {
+  --panel: transparent;
+  --line: rgba(124, 196, 255, 0.22);
+  --ink: #eaf4ff;
+  --muted: rgba(176, 210, 240, 0.72);
+  --gold: #f0bf62;
+  --holo: #7cc4ff;
+  --win: #6fe0a0;
+  --draw: #f2c46b;
+  --loss: #ff7a5c;
+  --serif: "Rajdhani", system-ui, sans-serif;
+  --sans: "Rajdhani", system-ui, sans-serif;
+  --chart-1: #b98f4c; --chart-2: #f0b45a; --chart-3: #ffd27f; --chart-now: #fff1c4; --chart-low: #ff7a5c;
+  --chart-fill-up: #f0b45a; --chart-fill-down: #f0b45a; --chart-fill-opacity: 0.3;
+  --eval-good: rgba(111, 224, 160, 0.28); --eval-bad: rgba(255, 122, 92, 0.28); --eval-line: #eaf4ff;
+}
+
+/* Panels: the fill sits on ::before, clipped to the chamfered shape; theme.js draws the frame
+   (an SVG) on top of it, so its glow isn't clipped. */
+.theme-holo .panel {
+  --cut: 16px;
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+}
+.theme-holo .panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  background:
+    linear-gradient(rgba(124, 196, 255, 0.05) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(124, 196, 255, 0.05) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(160deg, rgba(18, 38, 60, 0.7), rgba(5, 12, 22, 0.62));
+}
+.holo-frame { position: absolute; inset: 0; z-index: -1; overflow: visible; pointer-events: none; }
+.holo-frame .pulse { animation: holoPulse 2.6s ease-in-out infinite; }
+.holo-frame .pulse.late { animation-delay: -1.3s; }
+@keyframes holoPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.holo-frame .sweep { stroke-dasharray: 60 2000; animation: holoSweep 7s linear infinite; }
+@keyframes holoSweep { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -2060; } }
+
+/* Type: HUD labels, glowing numbers. */
+.theme-holo .label {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.24em;
+  color: var(--holo);
+  text-shadow: 0 0 10px rgba(124, 196, 255, 0.55);
+}
+.theme-holo .label small::before, .theme-holo .label small::after { content: none; }
+.theme-holo .label small {
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: rgba(176, 210, 240, 0.8);
+  border-left: 1px solid rgba(124, 196, 255, 0.4);
+  padding-left: 10px;
+  margin-left: 10px;
+}
+.theme-holo .num { font-weight: 700; text-shadow: 0 0 14px rgba(160, 210, 255, 0.35); }
+.theme-holo .rating-now { font-size: 72px; letter-spacing: 0.01em; }
+.theme-holo .delta { font-weight: 700; text-shadow: 0 0 12px currentColor; }
+.theme-holo .ends span, .theme-holo .stat .sub, .theme-holo .q .sub, .theme-holo .accs span { letter-spacing: 0.12em; text-transform: uppercase; font-size: 12px; }
+.theme-holo .stat .sub, .theme-holo .q .sub { font-size: 13px; }
+
+/* The knight replaces the pawn icon in the player tag and the ticker. */
+.theme-holo .pawn {
+  display: inline-block;
+  width: 30px;
+  height: 38px;
+  font-size: 0;
+  vertical-align: middle;
+  background: url("knight.webp") center / contain no-repeat;
+  filter: drop-shadow(0 0 6px rgba(124, 196, 255, 0.6));
+}
+.theme-holo .player { --cut: 12px; }
+.theme-holo .player .name { font-size: 30px; font-weight: 700; letter-spacing: 0.02em; }
+
+/* Charts sit on a faint grid. */
+.theme-holo .chart, .theme-holo .evalchart {
+  background:
+    linear-gradient(rgba(124, 196, 255, 0.09) 1px, transparent 1px) 0 0 / 100% 25%,
+    linear-gradient(90deg, rgba(124, 196, 255, 0.09) 1px, transparent 1px) 0 0 / 10% 100%;
+  filter: drop-shadow(0 0 6px rgba(240, 180, 90, 0.35));
+}
+
+/* Stats and openings. */
+.theme-holo .stats { --cut: 12px; }
+.theme-holo .stat { border-left-color: rgba(124, 196, 255, 0.25); }
+.theme-holo .openings-head { border-bottom-color: rgba(124, 196, 255, 0.3); }
+.theme-holo .openings-head i { font-family: var(--sans); font-style: normal; letter-spacing: 0.12em; }
+.theme-holo .opening { border-bottom-color: rgba(124, 196, 255, 0.1); }
+.theme-holo .opening .name { font-weight: 600; font-size: 22px; }
+.theme-holo .dot { box-shadow: 0 0 10px currentColor; }
+.theme-holo .bar { background: rgba(124, 196, 255, 0.1); height: 9px; border-radius: 0; }
+.theme-holo .bar span { box-shadow: 0 0 10px rgba(255, 255, 255, 0.25); }
+.theme-holo .q { border-left-color: rgba(124, 196, 255, 0.25); }
+.theme-holo .badge { box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
+.theme-holo .card.moment { box-shadow: none; }
+.theme-holo .card.moment::before { background: linear-gradient(160deg, rgba(60, 46, 18, 0.72), rgba(10, 12, 20, 0.66)); }
+
+/* The hologram knight beside the rating panel, with turning rings (placed by theme.js). */
+.holo-emblem { position: fixed; width: 250px; height: 295px; pointer-events: none; z-index: 5; }
+.holo-emblem img { position: absolute; left: 30px; top: 12px; width: 190px; height: 270px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(124, 196, 255, 0.45)); animation: holoFlicker 6s ease-in-out infinite; }
+.holo-emblem svg { position: absolute; inset: 0; overflow: visible; }
+.holo-emblem .spin { transform-origin: 100px 104px; animation: holoSpin 40s linear infinite; }
+.holo-emblem .spin.back { animation-duration: 65s; animation-direction: reverse; }
+@keyframes holoSpin { to { transform: rotate(360deg); } }
+@keyframes holoFlicker { 0%, 100% { opacity: 0.95; } 47% { opacity: 0.95; } 48% { opacity: 0.75; } 49% { opacity: 1; } 70% { opacity: 0.88; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-frame .pulse, .holo-frame .sweep, .holo-emblem .spin, .holo-emblem img { animation: none; }
+}
+.theme-holo .rating-card { overflow: visible; } /* let the frame's glow show */
