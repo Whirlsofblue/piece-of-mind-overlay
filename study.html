@@ -78,6 +78,7 @@
         <select id="visibility"><option value="unlisted" selected>Unlisted (anyone with the link)</option><option value="private">Private</option><option value="public">Public</option></select></label>
     </div>
     <label class="check"><input type="checkbox" id="openings" checked><span>Opening notes and quizzes<small>Where each game left the moves strong players usually choose, plus a one-move quiz chapter whenever it was you.</small></span></label>
+    <label class="check"><input type="checkbox" id="plans" checked><span>Plan maps<small>For each opening you played (up to three), arrows showing where master players put their pieces from there, and a master game playing it out.</small></span></label>
     <label class="check"><input type="checkbox" id="moments" checked><span>Critical moments<small>The 2–3 moves that decided each game, looked at more deeply, with the engine's top three moves there.</small></span></label>
     <label class="check"><input type="checkbox" id="puzzles" checked><span>Puzzles from your games<small>Wherever only one move worked and you missed it, a one-move puzzle chapter.</small></span></label>
     <label class="check"><input type="checkbox" id="collectPuzzles" checked><span>Add puzzles to “My puzzles”<small>A private study that grows every session, like My openings.</small></span></label>
@@ -98,6 +99,7 @@
 import { Engine, analyseGame } from "./review.js";
 import { annotatedPgn, openingReport, openingQuiz, fensBefore } from "./annotate.js";
 import { criticalPlies, deepLines, isOnlyMove, momentNotes, puzzlePgn } from "./moments.js";
+import { planMap } from "./plans.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -284,7 +286,8 @@ $("create").onclick = async () => {
   const depth = Number(new URLSearchParams(location.search).get("depth")) || 18;
   const engine = new Engine(depth);
   const withOpenings = $("openings").checked, withMoments = $("moments").checked, withPuzzles = $("puzzles").checked;
-  const chapters = [], quizzes = [], puzzles = [];
+  const withPlans = $("plans").checked;
+  const chapters = [], quizzes = [], puzzles = [], planWanted = [];
   const totals = { W: 0, D: 0, L: 0, acc: [] };
   try {
     await engine.start();
@@ -321,11 +324,27 @@ $("create").onclick = async () => {
       totals.acc.push(r.accuracy[me]);
       const name = `${{ W: "Won", L: "Lost", D: "Drew" }[res]} vs ${opp}${opening?.name ? ` · ${opening.name.split(":")[0]}` : ""}`.slice(0, 100);
       chapters.push({ name, pgn: annotatedPgn(g, r, opening, me, moments), orientation });
+      // Plan map: from where this game left the common path (or around move 6), once per opening and side.
+      const family = (opening?.name || "").split(":")[0] || `${r.moves.slice(0, 4).join(" ")}`;
+      if (withPlans && !planWanted.some((w) => w.family === family && w.me === me)) {
+        const ply = Math.max(8, Math.min(20, opening?.deviation?.ply ?? opening?.theoryEnds ?? 12));
+        planWanted.push({ family, me, moves: r.uci.slice(0, ply), orientation });
+      }
       const quiz = openingQuiz(g, r, opening, me);
       if (quiz) quizzes.push({ name: `Quiz: ${opening.name ? opening.name.split(":")[0] : "opening"} (move ${Math.floor(opening.deviation.ply / 2) + 1})`.slice(0, 100), pgn: quiz, orientation, mode: "gamebook" });
     }
     engine.stop();
     bar.value = 1;
+
+    const plans = [];
+    for (const w of planWanted.slice(0, 3)) {
+      log(`Mapping master plans: ${w.family}…`);
+      try {
+        const plan = await planMap(token, w.moves, w.me, w.family);
+        if (plan) plans.push({ name: `Plan map: ${w.family}`.slice(0, 100), pgn: plan.pgn, orientation: w.orientation });
+        else log(`Not enough master games for a ${w.family} plan map.`);
+      } catch (e) { log(`Plan map skipped (${e.message}).`, true); }
+    }
 
     const day = new Date(games.at(-1).end_time * 1000).toLocaleDateString("en", { month: "short", day: "numeric" });
     log("Creating the study on Lichess…");
@@ -337,9 +356,10 @@ $("create").onclick = async () => {
     const summary = `[Event "Session summary"]\n[Result "*"]\n\n{ ${games.length} games: ${totals.W} won, ${totals.D} drawn, ${totals.L} lost. Average accuracy ${avg.toFixed(1)}%. ` +
       `Each game is annotated with ?! ? ?? where the engine disagreed, with its better line as a variation.` +
       (withMoments ? ` 🔑 marks the moments that decided each game, with the engine's top three moves there.` : "") +
+      (plans.length ? ` The plan maps show where master players put their pieces in your openings: green and yellow arrows for your side, red for theirs, then a master game playing it out.` : "") +
       (puzzles.length ? ` The puzzle chapters are positions from your games where only one move worked: find it.` : "") +
       (quizzes.length ? ` The quiz chapters are positions from your openings: find the move strong players choose.` : "") + ` } *\n`;
-    const all = [{ name: "Session summary", pgn: summary }, ...chapters, ...puzzles, ...quizzes].slice(0, 63);
+    const all = [{ name: "Session summary", pgn: summary }, ...chapters, ...plans, ...puzzles, ...quizzes].slice(0, 63);
     for (const [i, c] of all.entries()) {
       log(`Adding chapter ${i + 1} of ${all.length}: ${c.name}`);
       await lichess(`/api/study/${study.id}/import-pgn`, { pgn: c.pgn, name: c.name, ...(c.orientation && { orientation: c.orientation }), ...(c.mode && { mode: c.mode }) });
@@ -351,7 +371,7 @@ $("create").onclick = async () => {
     const url = `${LICHESS}/study/${study.id}`;
     const done = document.createElement("div");
     done.className = "done";
-    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${plural(chapters.length, "game")}, ${plural(puzzles.length, "puzzle")}, ${plural(quizzes.length, "quiz", "quizzes")}).${notes}`;
+    done.innerHTML = `Done: <a href="${url}" target="_blank" rel="noopener">open your study</a> (${plural(chapters.length, "game")}, ${plural(plans.length, "plan map")}, ${plural(puzzles.length, "puzzle")}, ${plural(quizzes.length, "quiz", "quizzes")}).${notes}`;
     $("log").append(done);
   } catch (e) {
     console.error(e);

@@ -66,6 +66,10 @@ when it reaches Lichess's 64-chapter limit). Positions already there aren't adde
 **Critical moments:** the 2–3 moves that cost each game the most get a deeper look (Lichess's
 cloud evaluation when it has the position, otherwise Stockfish searching deeper) with the
 engine's top three moves as variations, marked 🔑.
+**Plan maps:** for up to three openings per session, from where your game left the common path,
+arrows for the routes master players' pieces usually take from there ([%cal] / [%csl] shapes,
+weighted towards games that side won), the usual pawn moves, and a master game playing it out.
+Uses the Lichess masters database (top games of the position and its two main moves).
 **Puzzles:** wherever only one move worked (clearly better than the second best, Lichess-puzzle
 style) and you missed it, a one-move interactive chapter; they also collect in "My puzzles".
 The Lichess login stays in your browser and can be revoked at lichess.org/account/oauth/token.
