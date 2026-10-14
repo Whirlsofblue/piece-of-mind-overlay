@@ -130,3 +130,4 @@ body.theme-cafe:not(.vertical) #root { padding-top: 130px; }
   .theme-cafe .panel::after, .cafe-emblem .steam path { animation: none; }
   .cafe-emblem .steam path { opacity: 0.35; }
 }
+body.theme-cafe.vertical .panel::before { opacity: var(--fill, 0.86); }

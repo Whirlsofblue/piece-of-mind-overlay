@@ -129,3 +129,4 @@ body.theme-blossom:not(.vertical) #root { padding-top: 150px; }
   .theme-blossom .panel::before, .blossom-frame .twinkle, .blossom-emblem .twinkle { animation: none; }
   .blossom-emblem .petal { display: none; }
 }
+body.theme-blossom.vertical .panel::before { opacity: var(--fill, 0.86); }

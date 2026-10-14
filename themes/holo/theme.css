@@ -123,3 +123,11 @@ body.theme-holo {
 }
 .theme-holo .rating-card { overflow: visible; } /* let the frame's glow show */
 body.theme-holo:not(.vertical) #root { padding-top: 40px; } /* room for the knight's head */
+
+/* Over a bright camera the glass turns grey: in the Shorts layout (always over the camera) the
+   panels are more solid, and every glowing text has a dark halo behind it. fill= still overrides. */
+body.theme-holo.vertical .panel::before { opacity: var(--fill, 0.86); }
+.theme-holo .num, .theme-holo .label, .theme-holo .delta, .theme-holo .ticker, .theme-holo .sub, .theme-holo .foot, .theme-holo .vsline, .theme-holo .note {
+  text-shadow: 0 0 2px rgba(0, 8, 20, 0.95), 0 1px 4px rgba(0, 8, 20, 0.9), 0 0 12px rgba(124, 196, 255, 0.35);
+}
+.theme-holo .card .label { font-size: 19px; color: #9fd4ff; }

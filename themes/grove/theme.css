@@ -127,3 +127,9 @@ body.theme-grove {
 
 /* Room above the panels for the knight to stand on the rating panel (desktop layout). */
 body.theme-grove:not(.vertical) #root { padding-top: 150px; }
+
+/* Over a bright camera: more solid panels in the Shorts layout, and a dark halo behind the text. */
+body.theme-grove.vertical .panel::before { opacity: var(--fill, 0.86); }
+.theme-grove .num, .theme-grove .label, .theme-grove .delta, .theme-grove .ticker, .theme-grove .sub, .theme-grove .foot, .theme-grove .vsline, .theme-grove .note {
+  text-shadow: 0 0 2px rgba(5, 15, 6, 0.95), 0 1px 4px rgba(5, 15, 6, 0.9);
+}
