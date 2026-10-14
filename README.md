@@ -48,6 +48,7 @@ Add these to the URL with `&`:
 | `reset` | Start a new session now. Otherwise a session ends after 6 hours without games. |
 | `since=2` | Count the last 2 hours as this session, if you added the overlay late. |
 | `layout=vertical` | Big, phone-readable panels: `ticker` (rating, score, streak) and `card`, which rotates between your rating, the last game and the session, and shows each finished game for 12 seconds. |
+| `font=outfit` | Display font: `classic` (the original serif), `fraunces`, `outfit`, `nunito`, `grotesk` or `bricolage`. |
 | `demo` | Made-up numbers, for arranging your scene before you play. Add `moment` to see the post-game card. |
 
 ## Notes
