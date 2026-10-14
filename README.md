@@ -28,12 +28,11 @@ web address rather than opened as a file, because browsers won't run the engine 
 2. **Move-quality counts.** These need OBS's WebSocket server and the extension:
    - In OBS: **Tools → WebSocket Server Settings**, tick *Enable WebSocket server*,
      then click *Show Connect Info* and copy the password.
-   - Add the password to the overlay URL: `...?user=YOURNAME&password=THEPASSWORD`
    - In the Piece of Mind popup: **Stream overlay**, tick *Send move counts to OBS*,
      paste the same password, then **Test connection**. The overlay says
      "Piece of Mind connected" for a moment.
 
-   Keep this URL off-screen. It contains your OBS password.
+   The overlay itself needs no password: OBS passes the counts to its Browser Sources.
 
 ## Options
 

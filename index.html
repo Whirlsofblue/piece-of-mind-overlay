@@ -5,15 +5,14 @@
   Session stats come from chess.com's public game data (polled every 20 s). Each finished
   game is then analysed here with Stockfish, using Lichess's published accuracy and
   inaccuracy / mistake / blunder formulas. chess.com's own move counts (Brilliant, Great...)
-  come from the Piece of Mind extension, which reads chess.com's post-game box and relays it
-  through OBS's WebSocket server (OBS 28+: Tools > WebSocket Server Settings).
+  come from the Piece of Mind extension, which reads chess.com's post-game box and has OBS
+  pass it to its Browser Sources (obs-websocket's obs-browser "emit_event" request), so this
+  page needs no connection or password of its own.
 
   Must be served over http(s): browsers don't run the engine or modules from file:// pages.
 
   URL options:
     user=NAME        chess.com username (required)
-    password=...     OBS WebSocket password, for move-quality counts (leave out if auth is off)
-    port=4455        OBS WebSocket port
     show=player,rating,stats,review,lastgame,openings,quality   panels to show, in order (one per source works too)
     layout=vertical  big, phone-readable panels for vertical streams: show=ticker (one line of
                      rating, score and streak) and show=card (rotates rating / last game / session,
@@ -171,8 +170,6 @@ import { Engine, analyseGame } from "./review.js";
 
 const params = new URLSearchParams(location.search);
 const USER = (params.get("user") || "").trim().toLowerCase();
-const PORT = params.get("port") || "4455";
-const PASSWORD = params.get("password") || "";
 const VERTICAL = params.get("layout") === "vertical";
 const SHOW = (params.get("show") || (VERTICAL ? "ticker,card" : "player,rating,stats,review,lastgame,openings,quality")).split(",");
 const QUALITY_SHOWN = (params.get("quality") || "brilliant,great,best").split(",");
@@ -671,43 +668,24 @@ async function refresh() {
   }
 }
 
-// ---- Move-quality counts relayed by the extension through OBS's WebSocket server ----
-async function sha256b64(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+// ---- chess.com's move counts, relayed by the extension through OBS ----
+// OBS hands Browser Sources a window event named "pom" (obs-browser's emit_event).
+function onPom(e) {
+  if (e.pom === "test") toast("Piece of Mind connected");
+  // A full review of a game (all categories) replaces its post-game three.
+  const known = session.quality.find((q) => q.key === e.key);
+  if (e.pom === "postgame" && e.counts && (!known || (e.full && !known.full))) {
+    if (known) session.quality.splice(session.quality.indexOf(known), 1);
+    session.quality.push({ key: e.key, at: known?.at ?? now(), counts: e.counts, full: !!e.full });
+    session.last = now();
+    saveSession();
+    if (lastSummary) render(lastSummary, Object.keys(e.counts));
+    setTimeout(refresh, 3000); // the finished game shows up in chess.com's data within seconds
+  }
 }
-
-function connectObs() {
-  let ws;
-  try { ws = new WebSocket(`ws://127.0.0.1:${PORT}`); } catch { return; }
-  ws.onmessage = async (msg) => {
-    const { op, d } = JSON.parse(msg.data);
-    if (op === 0) { // Hello
-      const identify = { rpcVersion: 1, eventSubscriptions: 1 }; // General events carry CustomEvent
-      if (d.authentication) {
-        identify.authentication = await sha256b64((await sha256b64(PASSWORD + d.authentication.salt)) + d.authentication.challenge);
-      }
-      ws.send(JSON.stringify({ op: 1, d: identify }));
-    } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.pom) {
-      const e = d.eventData;
-      if (e.pom === "test") toast("Piece of Mind connected");
-      // A full review of a game (all categories) replaces its post-game three.
-      const known = session.quality.find((q) => q.key === e.key);
-      if (e.pom === "postgame" && e.counts && (!known || (e.full && !known.full))) {
-        if (known) session.quality.splice(session.quality.indexOf(known), 1);
-        session.quality.push({ key: e.key, at: known?.at ?? now(), counts: e.counts, full: !!e.full });
-        session.last = now();
-        saveSession();
-        if (lastSummary) render(lastSummary, Object.keys(e.counts));
-        setTimeout(refresh, 3000); // the finished game shows up in chess.com's data within seconds
-      }
-    }
-  };
-  ws.onclose = (e) => {
-    if (e.code === 4009) { toast("OBS WebSocket password is wrong"); return; }
-    setTimeout(connectObs, 5000);
-  };
-}
+window.addEventListener("pom", (event) => {
+  try { onPom(typeof event.detail === "string" ? JSON.parse(event.detail) : event.detail || {}); } catch (err) { console.error(err); }
+});
 
 if (SHOW.includes("card")) {
   setInterval(() => {
@@ -726,7 +704,6 @@ if (DEMO) {
   message("Loading…");
   refresh();
   setInterval(refresh, 20000);
-  if (SHOW.includes("quality")) connectObs();
 }
 </script>
 </body>
