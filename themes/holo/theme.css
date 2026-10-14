@@ -32,6 +32,7 @@ body.theme-holo {
   background: none;
 }
 .theme-holo .panel::before {
+  opacity: var(--fill, 0.66); /* fill=0-100 on the URL */
   content: "";
   position: absolute;
   inset: 0;
@@ -40,7 +41,7 @@ body.theme-holo {
   background:
     linear-gradient(rgba(124, 196, 255, 0.05) 1px, transparent 1px) 0 0 / 28px 28px,
     linear-gradient(90deg, rgba(124, 196, 255, 0.05) 1px, transparent 1px) 0 0 / 28px 28px,
-    linear-gradient(160deg, rgba(18, 38, 60, 0.7), rgba(5, 12, 22, 0.62));
+    linear-gradient(160deg, rgb(18, 38, 60), rgb(5, 12, 22));
 }
 .holo-frame { position: absolute; inset: 0; z-index: -1; overflow: visible; pointer-events: none; }
 .holo-frame .pulse { animation: holoPulse 2.6s ease-in-out infinite; }
@@ -106,7 +107,7 @@ body.theme-holo {
 .theme-holo .q { border-left-color: rgba(124, 196, 255, 0.25); }
 .theme-holo .badge { box-shadow: 0 0 12px rgba(255, 255, 255, 0.15); }
 .theme-holo .card.moment { box-shadow: none; }
-.theme-holo .card.moment::before { background: linear-gradient(160deg, rgba(60, 46, 18, 0.72), rgba(10, 12, 20, 0.66)); }
+.theme-holo .card.moment::before { background: linear-gradient(160deg, rgb(60, 46, 18), rgb(10, 12, 20)); }
 
 /* The hologram knight beside the rating panel, with turning rings (placed by theme.js). */
 .holo-emblem { position: absolute; width: 250px; height: 295px; pointer-events: none; z-index: 5; }

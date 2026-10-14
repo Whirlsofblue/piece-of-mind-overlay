@@ -32,8 +32,10 @@ body.theme-blossom {
   box-shadow: none;
   background: none;
   color: var(--ink);
+  text-shadow: 0 0 6px rgba(255, 248, 251, 0.95), 0 0 2px rgba(255, 248, 251, 0.9);
 }
 .theme-blossom .panel::before {
+  opacity: var(--fill, 0.7); /* fill=0-100 on the URL */
   content: "";
   position: absolute;
   inset: 0;
@@ -42,7 +44,7 @@ body.theme-blossom {
   background:
     radial-gradient(120% 90% at 85% 0%, rgba(255, 236, 200, 0.55), transparent 60%),
     linear-gradient(115deg, transparent 0 30%, rgba(255, 255, 255, 0.25) 36%, transparent 44%) 0 0 / 220% 100%,
-    linear-gradient(165deg, rgba(255, 249, 251, 0.92), rgba(251, 234, 240, 0.87));
+    linear-gradient(165deg, rgb(255, 249, 251), rgb(251, 234, 240));
   animation: blossomLight 26s ease-in-out infinite alternate;
 }
 @keyframes blossomLight { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 0, 100% 0, 0 0; } }
@@ -101,7 +103,7 @@ body.theme-blossom {
 /* Charts. */
 .theme-blossom .chart, .theme-blossom .evalchart { filter: drop-shadow(0 0 5px rgba(231, 163, 184, 0.6)); }
 .theme-blossom .rating-card { overflow: visible; }
-.theme-blossom .card.moment::before { background: linear-gradient(165deg, rgba(255, 240, 214, 0.9), rgba(250, 226, 234, 0.82)); }
+.theme-blossom .card.moment::before { background: linear-gradient(165deg, rgb(255, 240, 214), rgb(250, 226, 234)); }
 
 /* The marble knight standing on the rating panel, in a gold ring, with sparkles and petals. */
 body.theme-blossom:not(.vertical) #root { padding-top: 150px; }

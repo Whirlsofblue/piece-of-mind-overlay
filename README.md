@@ -51,6 +51,7 @@ Add these to the URL with `&`:
 | `theme=holo` | The look: `classic` (default); `holo`, translucent HUD panels with glowing chamfered frames and a hologram knight; `clean`, flat readable panels in one accent colour (with `accent=` and `light`); `cafe`, cozy lo-fi parchment panels with copper frames, ivy, window-light leaf shadows and a steaming cup (light, dark ink text); `grove`, stone frames wound with vines and leaves on forest-green panels, with sun rays and a stone knight; or `blossom`, pale pearl panels with rose-gold frames, blossoming vines, sparkles, drifting petals and a marble knight (a light theme: dark text). Every theme works with both layouts. |
 | `accent=ff5a5f` | Your colour, for themes that use one (clean). Any hex colour, without the #. |
 | `light` | Light panels with dark text (clean). |
+| `fill=60` | How solid the panels are, from 0 (clear glass) to 100 (solid), in every theme. Defaults: classic 78, clean 86, holo 66, grove 63, blossom 70, cafe 72. |
 | `font=classic` | Display font. The default is `bricolage`; others are `classic` (the original serif), `fraunces`, `outfit`, `nunito` and `grotesk`. |
 | `demo` | Made-up numbers, for arranging your scene before you play. Add `moment` to see the post-game card. |
 

@@ -32,6 +32,7 @@ body.theme-grove {
   background: none;
 }
 .theme-grove .panel::before {
+  opacity: var(--fill, 0.63); /* fill=0-100 on the URL */
   content: "";
   position: absolute;
   inset: 0;
@@ -41,7 +42,7 @@ body.theme-grove {
     linear-gradient(115deg, transparent 0 28%, rgba(255, 238, 160, 0.07) 33%, transparent 39%, transparent 55%, rgba(255, 238, 160, 0.05) 60%, transparent 66%) 0 0 / 220% 100%,
     linear-gradient(rgba(231, 194, 106, 0.05) 1px, transparent 1px) 0 0 / 30px 30px,
     linear-gradient(90deg, rgba(231, 194, 106, 0.05) 1px, transparent 1px) 0 0 / 30px 30px,
-    linear-gradient(165deg, rgba(26, 52, 30, 0.66), rgba(8, 22, 12, 0.6));
+    linear-gradient(165deg, rgb(26, 52, 30), rgb(8, 22, 12));
   animation: groveRays 24s ease-in-out infinite alternate;
 }
 @keyframes groveRays { from { background-position: 0 0, 0 0, 0 0, 0 0; } to { background-position: 100% 0, 0 0, 0 0, 0 0; } }
@@ -100,7 +101,7 @@ body.theme-grove {
   filter: drop-shadow(0 0 6px rgba(196, 228, 106, 0.4));
 }
 .theme-grove .rating-card { overflow: visible; }
-.theme-grove .card.moment::before { background: linear-gradient(165deg, rgba(70, 58, 20, 0.7), rgba(12, 22, 12, 0.64)); }
+.theme-grove .card.moment::before { background: linear-gradient(165deg, rgb(70, 58, 20), rgb(12, 22, 12)); }
 
 /* The stone knight standing on the rating panel, in a gold ring, with a few leaves drifting down. */
 .grove-emblem { position: absolute; width: 230px; height: 260px; pointer-events: none; z-index: 5; }

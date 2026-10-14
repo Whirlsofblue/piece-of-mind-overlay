@@ -36,12 +36,12 @@ body.theme-clean.light {
 }
 
 .theme-clean .panel {
-  background: var(--panel);
+  background: rgb(16 17 21 / var(--fill, 0.86));
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
 }
-.theme-clean.light .panel { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1); }
+.theme-clean.light .panel { background: rgb(255 255 255 / var(--fill, 0.92)); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1); }
 
 /* Labels: small caps-style text with an accent mark. */
 .theme-clean .label {
