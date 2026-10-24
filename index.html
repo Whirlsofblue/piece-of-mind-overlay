@@ -151,6 +151,7 @@
   .ticker { display: inline-flex; align-items: center; gap: 13px; transform-origin: left top; align-self: flex-start; width: max-content; padding: 8px 22px; border-radius: 14px; font-family: var(--serif); font-size: 34px; font-weight: 600; white-space: nowrap; }
   .ticker .delta { font-size: 30px; }
   .ticker .sep { color: var(--muted); font-weight: 500; }
+  .ticker .acc-icon { margin-right: 0.22em; }
   .card { width: 420px; height: 236px; box-sizing: border-box; padding: 14px 20px; display: flex; flex-direction: column; }
   .card.fade { animation: cardIn 0.6s ease-out; }
   @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -521,7 +522,7 @@ function tickerAccuracy(s) {
   const reviews = sessionReviews(s);
   if (!reviews.length) return "";
   const acc = reviews.reduce((a, r) => a + r.acc, 0) / reviews.length;
-  return `<span class="sep">·</span><span class="acc ${accClass(acc)}">🎯${acc.toFixed(1)}%</span>`;
+  return `<span class="sep">·</span><span class="acc ${accClass(acc)}"><span class="acc-icon">🎯</span>${acc.toFixed(1)}%</span>`;
 }
 
 // ---- Vertical card: rotates between views; a finished game takes over for a few seconds ----
