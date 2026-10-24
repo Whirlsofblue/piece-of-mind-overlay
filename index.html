@@ -12,7 +12,8 @@
   Must be served over http(s): browsers don't run the engine or modules from file:// pages.
 
   URL options:
-    user=NAME        chess.com username (required)
+    user=NAME        chess.com username (required), or a Lichess one with site=lichess
+    site=lichess     follow a Lichess account instead of chess.com
     show=player,rating,stats,review,lastgame,openings,quality   panels to show, in order (one per source works too)
     layout=vertical  big, phone-readable panels for vertical streams: show=ticker (one line of
                      rating, score and streak) and show=card (rotates rating / last game / session,
@@ -182,6 +183,7 @@ import { Engine, analyseGame } from "./review.js";
 
 const params = new URLSearchParams(location.search);
 const USER = (params.get("user") || "").trim().toLowerCase();
+const SITE = params.get("site") === "lichess" ? "lichess" : "chesscom"; // site=lichess for a Lichess account
 const VERTICAL = params.get("layout") === "vertical";
 const SHOW = (params.get("show") || (VERTICAL ? "ticker,card" : "player,rating,stats,review,lastgame,openings,quality")).split(",");
 const QUALITY_SHOWN = (params.get("quality") || "brilliant,great,best").split(",");
@@ -247,7 +249,7 @@ const OPENING_COLOURS = ["#7fb069", "#c8644f", "#e0b45c", "#5b8fd6", "#a77fd0", 
 const DRAWS = new Set(["agreed", "repetition", "stalemate", "insufficient", "50move", "timevsinsufficient"]);
 
 // ---- Session: kept in localStorage so a refreshed source carries on ----
-const STORE = `pom-overlay-${USER}`;
+const STORE = `pom-overlay-${SITE === "lichess" ? "lichess-" : ""}${USER}`;
 const now = () => Math.floor(Date.now() / 1000);
 let session = null;
 try { session = JSON.parse(localStorage.getItem(STORE)); } catch {}
@@ -307,13 +309,58 @@ function openingName(eco) {
 let profile = null;
 async function loadProfile() {
   if (profile || DEMO) return;
+  if (SITE === "lichess") {
+    const p = await getJson(`https://lichess.org/api/user/${USER}`);
+    // Same shape as chess.com's stats: stats.chess_blitz.last.rating.
+    const stats = Object.fromEntries(Object.entries(p?.perfs || {}).map(([k, v]) => [`chess_${k === "correspondence" ? "daily" : k}`, { last: { rating: v.rating } }]));
+    profile = { name: p?.username || USER, title: p?.title || "", country: (p?.profile?.flag || "").slice(0, 2), stats };
+    return;
+  }
   const [p, stats] = await Promise.all([getJson(`${API}${USER}`), getJson(`${API}${USER}/stats`)]);
   profile = { name: p?.username || USER, title: p?.title || "", country: (p?.country || "").split("/").pop(), stats: stats || {} };
 }
 
+// ---- Lichess games, in chess.com's shape (rating is after the game; pre is before it) ----
+const LICHESS_SPEED = { ultraBullet: "bullet", bullet: "bullet", blitz: "blitz", rapid: "rapid", classical: "classical", correspondence: "daily" };
+function fromLichess(x) {
+  const player = (c) => {
+    const p = x.players[c];
+    const draw = !x.winner && ["draw", "stalemate"].includes(x.status);
+    return {
+      username: p.user?.name || `AI level ${p.aiLevel ?? "?"}`,
+      pre: p.rating ?? null,
+      rating: p.rating != null ? p.rating + (p.ratingDiff || 0) : null,
+      result: x.winner === c ? "win" : draw ? "agreed" : "lose",
+    };
+  };
+  return {
+    uuid: x.id, url: `https://lichess.org/${x.id}`, end_time: Math.floor((x.lastMoveAt || x.createdAt) / 1000),
+    time_class: LICHESS_SPEED[x.speed] || x.speed, rules: x.variant === "standard" ? "chess" : x.variant,
+    pgn: x.pgn || "", openingName: x.opening?.name || null, white: player("white"), black: player("black"),
+  };
+}
+async function lichessGames(since) {
+  const q = new URLSearchParams({ since: String(since * 1000), max: "100", pgnInJson: "true", clocks: "true", opening: "true" });
+  const r = await fetch(`https://lichess.org/api/games/user/${USER}?${q}`, { headers: { Accept: "application/x-ndjson" }, cache: "no-store" });
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error(`${r.status} lichess games`);
+  return (await r.text()).split("\n").filter(Boolean).map((l) => fromLichess(JSON.parse(l)))
+    .filter((g) => g.rules === "chess" && g.pgn && g.white.rating != null && g.black.rating != null)
+    .sort((a, b) => a.end_time - b.end_time);
+}
+
+// An opening's family name from either site: "Sicilian Defense".
+const openingOf = (g) => (g.openingName ? g.openingName.split(":")[0].trim() || "Other" : openingName(g.eco));
+
 const flag = (code) => (/^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0))) : "");
 
 async function fetchSession() {
+  if (SITE === "lichess") {
+    // Lichess records each game's rating before it, so no earlier game is needed for the start.
+    const played = await lichessGames(session.start);
+    const tc = TC === "auto" ? played.at(-1)?.time_class || "blitz" : TC;
+    return { tc, games: played.filter((g) => g.time_class === tc), prior: null };
+  }
   const today = new Date();
   const thisMonth = await monthGames(today, false);
   const start = new Date(session.start * 1000);
@@ -338,7 +385,8 @@ async function fetchSession() {
 function summarise({ tc, games, prior }) {
   const mine = games.map((g) => g[side(g)].rating);
   const statRating = profile?.stats?.[`chess_${tc}`]?.last?.rating;
-  const start = prior ? prior[side(prior)].rating : games.length ? mine[0] : statRating ?? null;
+  const first = games[0]?.[side(games[0])];
+  const start = prior ? prior[side(prior)].rating : first ? first.pre ?? first.rating : statRating ?? null;
   const series = start == null ? mine : [start, ...mine];
   const nowRating = mine.at(-1) ?? statRating ?? start;
   const results = games.map(outcome);
@@ -351,7 +399,7 @@ function summarise({ tc, games, prior }) {
   }
   const openings = {};
   for (const g of games) {
-    const name = openingName(g.eco);
+    const name = openingOf(g);
     const o = (openings[name] ||= { name, W: 0, D: 0, L: 0, n: 0 });
     o[outcome(g)]++;
     o.n++;
@@ -454,6 +502,14 @@ function evalChart(wps, marks) {
     <path d="${line}" fill="none" style="stroke:var(--eval-line)" stroke-width="2" stroke-linejoin="round"/>
     ${dots}
   </svg>`;
+}
+
+// Session average accuracy for the ticker, once a game has been analysed.
+function tickerAccuracy(s) {
+  const reviews = sessionReviews(s);
+  if (!reviews.length) return "";
+  const acc = reviews.reduce((a, r) => a + r.acc, 0) / reviews.length;
+  return `<span class="sep">·</span><span class="acc ${accClass(acc)}">🎯${acc.toFixed(1)}%</span>`;
 }
 
 // ---- Vertical card: rotates between views; a finished game takes over for a few seconds ----
@@ -596,7 +652,7 @@ const panels = {
       if (!g) return h("div", "panel lastgame", `<div class="label">Last game</div><div class="message">Waiting for your first game.</div>`);
       const me = side(g), r = session.reviews[g.uuid];
       info = {
-        opp: g[other(me)].username, oppRating: g[other(me)].rating, result: outcome(g), opening: openingName(g.eco),
+        opp: g[other(me)].username, oppRating: g[other(me)].rating, result: outcome(g), opening: openingOf(g),
         acc: r?.acc, oppAcc: r?.oppAcc, winPercents: r?.winPercents, marks: r?.marks || {},
       };
     }
@@ -612,7 +668,7 @@ const panels = {
     const streak = s.streak ? `<span class="streak-${s.streak.at(-1)}">🔥${s.streak}</span>` : "";
     return h("div", "panel ticker", `<span><span class="pawn">♟</span> ${s.now ?? "—"}</span>
       <span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "flat"}">${d > 0 ? "▲" : d < 0 ? "▼" : "±"}${Math.abs(d)}</span>
-      <span class="sep">·</span><span>${s.W}W ${s.D}D ${s.L}L</span>${streak ? `<span class="sep">·</span>${streak}` : ""}`);
+      <span class="sep">·</span><span>${s.W}W ${s.D}D ${s.L}L</span>${streak ? `<span class="sep">·</span>${streak}` : ""}${tickerAccuracy(s)}`);
   },
   card(s) {
     const view = cardView(s);

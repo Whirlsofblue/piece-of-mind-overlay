@@ -20,7 +20,7 @@ web address rather than opened as a file, because browsers won't run the engine 
    Width 680, height 1500 for every panel, or one Browser Source per panel (see `show` below).
 
    **Vertical streams (Shorts):** use two Browser Sources on a 1080 × 1920 canvas instead:
-   - Ticker, 600 × 74, under the board: `...?user=YOURNAME&layout=vertical&show=ticker`
+   - Ticker, 800 × 74 (it ends with your session accuracy), under the board: `...?user=YOURNAME&layout=vertical&show=ticker`
    - Card, 440 × 256, over the camera away from your face: `...?user=YOURNAME&layout=vertical&show=card`
 
    Keep both clear of the right edge and the bottom fifth, where YouTube puts its buttons, title and chat. Leave the custom CSS as it is. The background is already transparent.
@@ -41,6 +41,7 @@ Add these to the URL with `&`:
 | Option | What it does |
 |---|---|
 | `show=rating,stats` | Which panels, in order: `player`, `rating`, `stats`, `review`, `lastgame`, `openings`, `quality`. Use one panel per Browser Source to lay them out freely. |
+| `site=lichess` | Follow a Lichess account (`user=` is then your Lichess name). Everything works the same, except chess.com's Brilliant/Great/Best counts, which only exist on chess.com. |
 | `quality=brilliant,great,best` | Which of chess.com's tallies to show: `brilliant`, `great`, `best`, `excellent`, `good`, `book`, `inaccuracy`, `mistake`, `miss`, `blunder`. |
 | `depth=18` | Engine depth per position. 18 takes about 10 seconds a game on a recent Mac; lower is quicker. |
 | `engine=off` | Skip the engine review. |
