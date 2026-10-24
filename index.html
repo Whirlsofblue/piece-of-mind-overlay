@@ -187,7 +187,7 @@ const SITE = params.get("site") === "lichess" ? "lichess" : "chesscom"; // site=
 const VERTICAL = params.get("layout") === "vertical";
 const SHOW = (params.get("show") || (VERTICAL ? "ticker,card" : "player,rating,stats,review,lastgame,openings,quality")).split(",");
 const QUALITY_SHOWN = (params.get("quality") || "brilliant,great,best").split(",");
-const ENGINE_ON = params.get("engine") !== "off" && SHOW.some((k) => ["review", "lastgame", "card"].includes(k));
+const ENGINE_ON = params.get("engine") !== "off" && SHOW.some((k) => ["review", "lastgame", "card", "ticker"].includes(k));
 const DEPTH = Number(params.get("depth")) || 18;
 const TC = params.get("tc") || "auto";
 const DEMO = params.has("demo");
@@ -258,7 +258,19 @@ if (!session || params.has("reset") || now() - session.last > SESSION_GAP) {
 }
 session.reviews ||= {}; // game uuid -> engine review
 if (params.get("since")) session.start = now() - Math.round(parseFloat(params.get("since")) * 3600);
-const saveSession = () => { try { localStorage.setItem(STORE, JSON.stringify(session)); } catch {} };
+// Several Browser Sources (say a ticker and a card) share this storage: before reading or
+// saving, take in what the others have added, so a game analysed by one shows in all.
+function syncSession() {
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORE)); } catch {}
+  if (!stored || Math.abs(stored.start - session.start) > 600) return; // the same session, give or take a reload
+  session.reviews = { ...stored.reviews, ...session.reviews };
+  session.claims = { ...stored.claims, ...session.claims };
+  const keys = new Set(session.quality.map((q) => q.key));
+  session.quality.push(...(stored.quality || []).filter((q) => !keys.has(q.key)));
+  session.last = Math.max(session.last, stored.last || 0);
+}
+const saveSession = () => { syncSession(); try { localStorage.setItem(STORE, JSON.stringify(session)); } catch {} };
 saveSession();
 
 // ---- chess.com public data ----
@@ -721,10 +733,16 @@ let engine = null;
 let analysing = null; // { uuid, progress }
 async function analyseSession(summary) {
   if (!ENGINE_ON || analysing) return;
+  syncSession();
   const todo = summary.list.filter((g) => !session.reviews[g.uuid] && g.pgn).reverse();
   if (!todo.length) return;
   engine ||= new Engine(DEPTH);
   for (const g of todo) {
+    // Another source may have analysed it, or be analysing it now (a claim under 2 minutes old).
+    syncSession();
+    if (session.reviews[g.uuid] || now() - (session.claims?.[g.uuid] || 0) < 120) continue;
+    (session.claims ||= {})[g.uuid] = now();
+    saveSession();
     analysing = { uuid: g.uuid, progress: 0 };
     render(lastSummary);
     try {
@@ -762,6 +780,7 @@ async function analyseSession(summary) {
 async function refresh() {
   try {
     await loadProfile();
+    syncSession(); // results another source has saved since the last refresh
     const data = await fetchSession();
     const last = data.games.at(-1)?.end_time;
     if (last && last > session.last) { session.last = last; saveSession(); }
