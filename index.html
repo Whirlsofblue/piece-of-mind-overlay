@@ -148,7 +148,7 @@
 
   /* Vertical layout: sized for a 1080-wide canvas viewed on a phone */
   body.vertical #root { width: auto; padding: 8px; }
-  .ticker { display: inline-flex; align-items: center; gap: 18px; padding: 8px 22px; border-radius: 14px; font-family: var(--serif); font-size: 34px; font-weight: 600; white-space: nowrap; }
+  .ticker { display: inline-flex; align-items: center; gap: 13px; transform-origin: left top; align-self: flex-start; width: max-content; padding: 8px 22px; border-radius: 14px; font-family: var(--serif); font-size: 34px; font-weight: 600; white-space: nowrap; }
   .ticker .delta { font-size: 30px; }
   .ticker .sep { color: var(--muted); font-weight: 500; }
   .card { width: 420px; height: 236px; box-sizing: border-box; padding: 14px 20px; display: flex; flex-direction: column; }
@@ -713,9 +713,20 @@ function render(summary, bumped = []) {
   lastSummary = summary;
   const root = document.getElementById("root");
   root.replaceChildren(...SHOW.filter((k) => panels[k]).map((k) => panels[k](summary)));
+  fitTicker(root);
   if (theme.decorate) requestAnimationFrame(() => theme.decorate(root, { vertical: VERTICAL }));
   for (const k of bumped) root.querySelector(`.q[data-key="${k}"]`)?.classList.add("bump");
 }
+
+// The ticker grows as stats are added; shrink it to fit its Browser Source rather than spill out.
+function fitTicker(root) {
+  const t = root.querySelector(".ticker");
+  if (!t) return;
+  t.style.transform = "";
+  const room = window.innerWidth - 36, need = t.scrollWidth; // margin for the page padding and frame glow
+  if (need > room) t.style.transform = `scale(${(room / need).toFixed(3)})`;
+}
+window.addEventListener("resize", () => fitTicker(document.getElementById("root")));
 
 function message(text) {
   document.getElementById("root").replaceChildren(h("div", "panel message", esc(text)));

@@ -20,7 +20,7 @@ web address rather than opened as a file, because browsers won't run the engine 
    Width 680, height 1500 for every panel, or one Browser Source per panel (see `show` below).
 
    **Vertical streams (Shorts):** use two Browser Sources on a 1080 × 1920 canvas instead:
-   - Ticker, 800 × 74 (it ends with your session accuracy), under the board: `...?user=YOURNAME&layout=vertical&show=ticker`
+   - Ticker, 600 × 74 or wider (it shrinks itself to fit), under the board: `...?user=YOURNAME&layout=vertical&show=ticker`
    - Card, 440 × 256, over the camera away from your face: `...?user=YOURNAME&layout=vertical&show=card`
 
    Keep both clear of the right edge and the bottom fifth, where YouTube puts its buttons, title and chat. Leave the custom CSS as it is. The background is already transparent.
